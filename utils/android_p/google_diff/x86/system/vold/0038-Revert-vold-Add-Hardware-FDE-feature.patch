@@ -1,7 +1,7 @@
-From 3df1faeb7e70914cddefb4fb6ecd27bb989c4cc5 Mon Sep 17 00:00:00 2001
+From 22685e0da9b7d7dcf06165364958ed1dd9c096cf Mon Sep 17 00:00:00 2001
 From: Jackeagle <jackeagle102@gmail.com>
 Date: Mon, 6 May 2019 19:57:11 +0200
-Subject: [PATCH 8/8] Revert "vold: Add Hardware FDE feature"
+Subject: [PATCH] Revert "vold: Add Hardware FDE feature"
 
 This reverts commit 3585008ea98f4a1caf69d10c32a02e1169eeb248.
 
@@ -17,10 +17,10 @@ Signed-off-by: Jackeagle <jackeagle102@gmail.com>
  6 files changed, 50 insertions(+), 614 deletions(-)
 
 diff --git a/Android.bp b/Android.bp
-index ffb139e..48dfaaf 100644
+index 150a8284..163786ae 100644
 --- a/Android.bp
 +++ b/Android.bp
-@@ -140,11 +140,6 @@ cc_library_static {
+@@ -142,11 +142,6 @@ cc_library_static {
                  "libarcobbvolume",
              ],
          },
@@ -32,7 +32,7 @@ index ffb139e..48dfaaf 100644
      },
  }
  
-@@ -164,9 +159,6 @@ cc_binary {
+@@ -166,9 +161,6 @@ cc_binary {
                  "libarcobbvolume",
              ],
          },
@@ -43,7 +43,7 @@ index ffb139e..48dfaaf 100644
      init_rc: [
          "vold.rc",
 diff --git a/VoldNativeService.cpp b/VoldNativeService.cpp
-index 6d6c6ec..81523c6 100644
+index 6d6c6ecc..81523c66 100644
 --- a/VoldNativeService.cpp
 +++ b/VoldNativeService.cpp
 @@ -581,11 +581,11 @@ binder::Status VoldNativeService::fdeEnable(int32_t passwordType,
@@ -61,7 +61,7 @@ index 6d6c6ec..81523c6 100644
  
  binder::Status VoldNativeService::fdeVerifyPassword(const std::string& password) {
 diff --git a/VoldNativeService.h b/VoldNativeService.h
-index da8c660..2e90101 100644
+index da8c6601..2e901016 100644
 --- a/VoldNativeService.h
 +++ b/VoldNativeService.h
 @@ -82,7 +82,7 @@ public:
@@ -74,7 +74,7 @@ index da8c660..2e90101 100644
      binder::Status fdeGetField(const std::string& key, std::string* _aidl_return);
      binder::Status fdeSetField(const std::string& key, const std::string& value);
 diff --git a/binder/android/os/IVold.aidl b/binder/android/os/IVold.aidl
-index 9f5b21a..f386889 100644
+index 9f5b21af..f386889f 100644
 --- a/binder/android/os/IVold.aidl
 +++ b/binder/android/os/IVold.aidl
 @@ -65,7 +65,7 @@ interface IVold {
@@ -87,7 +87,7 @@ index 9f5b21a..f386889 100644
      @utf8InCpp String fdeGetField(@utf8InCpp String key);
      void fdeSetField(@utf8InCpp String key, @utf8InCpp String value);
 diff --git a/cryptfs.cpp b/cryptfs.cpp
-index bea9b2f..7aee819 100644
+index 10958a65..9983388c 100644
 --- a/cryptfs.cpp
 +++ b/cryptfs.cpp
 @@ -66,9 +66,6 @@
@@ -348,9 +348,9 @@ index bea9b2f..7aee819 100644
  }
 -#endif
  
+ #ifndef CONFIG_HW_DISK_ENCRYPTION
  /*
-  * If the ro.crypto.fde_sector_size system property is set, append the
-@@ -1306,13 +1132,7 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
+@@ -1308,13 +1134,7 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
      int retval = -1;
      int version[3];
      int load_count;
@@ -364,7 +364,7 @@ index bea9b2f..7aee819 100644
  
      if ((fd = open("/dev/device-mapper", O_RDWR | O_CLOEXEC)) < 0) {
          SLOGE("Cannot open device-mapper\n");
-@@ -1337,45 +1157,6 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
+@@ -1339,45 +1159,6 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
      minor = (io->dev & 0xff) | ((io->dev >> 12) & 0xfff00);
      snprintf(crypto_blk_name, MAXPATHLEN, "/dev/block/dm-%u", minor);
  
@@ -410,7 +410,7 @@ index bea9b2f..7aee819 100644
      if (!get_dm_crypt_version(fd, name, version)) {
          /* Support for allow_discards was added in version 1.11.0 */
          if ((version[0] >= 2) || ((version[0] == 1) && (version[1] >= 11))) {
-@@ -1391,7 +1172,6 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
+@@ -1393,7 +1174,6 @@ static int create_crypto_blk_dev(struct crypt_mnt_ftr* crypt_ftr, const unsigned
      }
      load_count = load_crypto_mapping_table(crypt_ftr, master_key, real_blk_name, name, fd,
                                             extra_params_as_string(extra_params_vec).c_str());
@@ -418,7 +418,7 @@ index bea9b2f..7aee819 100644
      if (load_count < 0) {
          SLOGE("Cannot load dm-crypt mapping table.\n");
          goto errout;
-@@ -1526,8 +1306,7 @@ static int scrypt_keymaster(const char *passwd, const unsigned char *salt,
+@@ -1528,8 +1308,7 @@ static int scrypt_keymaster(const char *passwd, const unsigned char *salt,
  static int encrypt_master_key(const char *passwd, const unsigned char *salt,
                                const unsigned char *decrypted_master_key,
                                unsigned char *encrypted_master_key,
@@ -428,7 +428,7 @@ index bea9b2f..7aee819 100644
  {
      unsigned char ikey[INTERMEDIATE_BUF_SIZE] = { 0 };
      EVP_CIPHER_CTX e_ctx;
-@@ -1539,7 +1318,7 @@ static int encrypt_master_key(const char *passwd, const unsigned char *salt,
+@@ -1541,7 +1320,7 @@ static int encrypt_master_key(const char *passwd, const unsigned char *salt,
  
      switch (crypt_ftr->kdf_type) {
      case KDF_SCRYPT_KEYMASTER:
@@ -437,7 +437,7 @@ index bea9b2f..7aee819 100644
              SLOGE("keymaster_create_key failed");
              return -1;
          }
-@@ -1709,13 +1488,13 @@ static int create_encrypted_random_key(const char *passwd, unsigned char *master
+@@ -1711,13 +1490,13 @@ static int create_encrypted_random_key(const char *passwd, unsigned char *master
      close(fd);
  
      /* Now encrypt it with the password */
@@ -453,7 +453,7 @@ index bea9b2f..7aee819 100644
  
      /*  Now umount the tmpfs filesystem */
      for (i=0; i<WAIT_UNMOUNT_COUNT; i++) {
-@@ -1732,18 +1511,18 @@ int wait_and_unmount(const char *mountpoint, bool kill)
+@@ -1734,18 +1513,18 @@ int wait_and_unmount(const char *mountpoint, bool kill)
  
          err = errno;
  
@@ -476,7 +476,7 @@ index bea9b2f..7aee819 100644
      }
  
      if (i < WAIT_UNMOUNT_COUNT) {
-@@ -1910,17 +1689,6 @@ static int cryptfs_restart_internal(int restart_main)
+@@ -1912,17 +1691,6 @@ static int cryptfs_restart_internal(int restart_main)
                      cryptfs_reboot(RebootType::reboot);
                  }
              } else {
@@ -494,7 +494,7 @@ index bea9b2f..7aee819 100644
                  SLOGE("Failed to mount decrypted data");
                  cryptfs_set_corrupt();
                  cryptfs_trigger_restart_min_framework();
-@@ -1929,7 +1697,6 @@ static int cryptfs_restart_internal(int restart_main)
+@@ -1931,7 +1699,6 @@ static int cryptfs_restart_internal(int restart_main)
                      SLOGE("Failed to setexeccon");
                  }
                  return -1;
@@ -502,7 +502,7 @@ index bea9b2f..7aee819 100644
              }
          }
          if (setexeccon(NULL)) {
-@@ -2024,66 +1791,6 @@ static int do_crypto_complete(const char *mount_point)
+@@ -2026,66 +1793,6 @@ static int do_crypto_complete(const char *mount_point)
    return CRYPTO_COMPLETE_ENCRYPTED;
  }
  
@@ -569,7 +569,7 @@ index bea9b2f..7aee819 100644
  static int test_mount_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
                                     const char *passwd, const char *mount_point, const char *label)
  {
-@@ -2190,7 +1897,7 @@ static int test_mount_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
+@@ -2192,7 +1899,7 @@ static int test_mount_encrypted_fs(struct crypt_mnt_ftr* crypt_ftr,
  
      if (upgrade) {
          rc = encrypt_master_key(passwd, crypt_ftr->salt, saved_master_key,
@@ -578,7 +578,7 @@ index bea9b2f..7aee819 100644
          if (!rc) {
              rc = put_crypt_ftr_and_key(crypt_ftr);
          }
-@@ -2287,66 +1994,6 @@ int check_unmounted_and_get_ftr(struct crypt_mnt_ftr* crypt_ftr)
+@@ -2289,66 +1996,6 @@ int check_unmounted_and_get_ftr(struct crypt_mnt_ftr* crypt_ftr)
      return 0;
  }
  
@@ -645,7 +645,7 @@ index bea9b2f..7aee819 100644
  int cryptfs_check_passwd(const char *passwd)
  {
      SLOGI("cryptfs_check_passwd");
-@@ -2364,14 +2011,8 @@ int cryptfs_check_passwd(const char *passwd)
+@@ -2366,14 +2013,8 @@ int cryptfs_check_passwd(const char *passwd)
          return rc;
      }
  
@@ -660,7 +660,7 @@ index bea9b2f..7aee819 100644
      if (rc) {
          SLOGE("Password did not match");
          return rc;
-@@ -2392,7 +2033,7 @@ int cryptfs_check_passwd(const char *passwd)
+@@ -2394,7 +2035,7 @@ int cryptfs_check_passwd(const char *passwd)
  
          crypt_ftr.flags &= ~CRYPT_FORCE_COMPLETE;
          put_crypt_ftr_and_key(&crypt_ftr);
@@ -669,7 +669,7 @@ index bea9b2f..7aee819 100644
          if (rc) {
              SLOGE("Could not change password on reboot encryption");
              return rc;
-@@ -2442,24 +2083,6 @@ int cryptfs_verify_passwd(const char *passwd)
+@@ -2444,24 +2085,6 @@ int cryptfs_verify_passwd(const char *passwd)
          /* If the device has no password, then just say the password is valid */
          rc = 0;
      } else {
@@ -694,7 +694,7 @@ index bea9b2f..7aee819 100644
          decrypt_master_key(passwd, decrypted_master_key, &crypt_ftr, 0, 0);
          if (!memcmp(decrypted_master_key, saved_master_key, crypt_ftr.keysize)) {
              /* They match, the password is correct */
-@@ -2469,7 +2092,6 @@ int cryptfs_verify_passwd(const char *passwd)
+@@ -2471,7 +2094,6 @@ int cryptfs_verify_passwd(const char *passwd)
              sleep(1);
              rc = 1;
          }
@@ -702,7 +702,7 @@ index bea9b2f..7aee819 100644
      }
  
      return rc;
-@@ -2593,12 +2215,6 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+@@ -2595,12 +2217,6 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
      off64_t previously_encrypted_upto = 0;
      bool rebootEncryption = false;
      bool onlyCreateHeader = false;
@@ -715,7 +715,7 @@ index bea9b2f..7aee819 100644
      int fd = -1;
  
      if (get_crypt_ftr_and_key(&crypt_ftr) == 0) {
-@@ -2703,6 +2319,30 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+@@ -2705,6 +2321,30 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
          fclose(breadcrumb);
      }
  
@@ -746,7 +746,7 @@ index bea9b2f..7aee819 100644
      /* Start the actual work of making an encrypted filesystem */
      /* Initialize a crypt_mnt_ftr for the partition */
      if (previously_encrypted_upto == 0 && !rebootEncryption) {
-@@ -2726,11 +2366,7 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+@@ -2728,11 +2368,7 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
              crypt_ftr.flags |= CRYPT_INCONSISTENT_STATE;
          }
          crypt_ftr.crypt_type = crypt_type;
@@ -758,7 +758,7 @@ index bea9b2f..7aee819 100644
  
          /* Make an encrypted master key */
          if (create_encrypted_random_key(onlyCreateHeader ? DEFAULT_PASSWORD : passwd,
-@@ -2745,7 +2381,7 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+@@ -2747,7 +2383,7 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
              unsigned char encrypted_fake_master_key[MAX_KEY_LEN];
              memset(fake_master_key, 0, sizeof(fake_master_key));
              encrypt_master_key(passwd, crypt_ftr.salt, fake_master_key,
@@ -767,7 +767,7 @@ index bea9b2f..7aee819 100644
          }
  
          /* Write the key to the end of the partition */
-@@ -2766,57 +2402,12 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+@@ -2768,57 +2404,12 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
          }
      }
  
@@ -827,7 +827,7 @@ index bea9b2f..7aee819 100644
          /* startup service classes main and late_start */
          property_set("vold.decrypt", "trigger_restart_min_framework");
          SLOGD("Just triggered restart_min_framework\n");
-@@ -2829,17 +2420,8 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
+@@ -2831,17 +2422,8 @@ int cryptfs_enable_internal(int crypt_type, const char* passwd, int no_ui) {
      }
  
      decrypt_master_key(passwd, decrypted_master_key, &crypt_ftr, 0, 0);
@@ -845,7 +845,7 @@ index bea9b2f..7aee819 100644
  
      /* If we are continuing, check checksums match */
      rc = 0;
-@@ -2973,7 +2555,7 @@ int cryptfs_enable_default(int no_ui) {
+@@ -2975,7 +2557,7 @@ int cryptfs_enable_default(int no_ui) {
      return cryptfs_enable_internal(CRYPT_TYPE_DEFAULT, DEFAULT_PASSWORD, no_ui);
  }
  
@@ -854,7 +854,7 @@ index bea9b2f..7aee819 100644
  {
      if (e4crypt_is_native()) {
          SLOGE("cryptfs_changepw not valid for file encryption");
-@@ -3000,28 +2582,6 @@ int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
+@@ -3002,28 +2584,6 @@ int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
          return -1;
      }
  
@@ -883,7 +883,7 @@ index bea9b2f..7aee819 100644
      crypt_ftr.crypt_type = crypt_type;
  
      rc = encrypt_master_key(crypt_type == CRYPT_TYPE_DEFAULT ? DEFAULT_PASSWORD
-@@ -3029,7 +2589,7 @@ int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
+@@ -3031,7 +2591,7 @@ int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
                         crypt_ftr.salt,
                         saved_master_key,
                         crypt_ftr.master_key,
@@ -892,7 +892,7 @@ index bea9b2f..7aee819 100644
      if (rc) {
          SLOGE("Encrypt master key failed: %d", rc);
          return -1;
-@@ -3037,57 +2597,8 @@ int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
+@@ -3039,57 +2599,8 @@ int cryptfs_changepw(int crypt_type, const char *currentpw, const char *newpw)
      /* save the key */
      put_crypt_ftr_and_key(&crypt_ftr);
  
@@ -950,9 +950,9 @@ index bea9b2f..7aee819 100644
  
  static unsigned int persist_get_max_entries(int encrypted) {
      struct crypt_mnt_ftr crypt_ftr;
-@@ -3489,62 +3000,3 @@ int cryptfs_isConvertibleToFBE()
+@@ -3491,62 +3002,3 @@ int cryptfs_isConvertibleToFBE()
      struct fstab_rec* rec = fs_mgr_get_entry_for_mount_point(fstab_default, DATA_MNT_POINT);
-     return fs_mgr_is_convertible_to_fbe(rec) ? 1 : 0;
+     return (rec && fs_mgr_is_convertible_to_fbe(rec)) ? 1 : 0;
  }
 -
 -int cryptfs_create_default_ftr(struct crypt_mnt_ftr* crypt_ftr, __attribute__((unused))int key_length)
@@ -1014,7 +1014,7 @@ index bea9b2f..7aee819 100644
 -                  intermediate_key_size);
 -}
 diff --git a/cryptfs.h b/cryptfs.h
-index d8923db..d6c7dc5 100644
+index d8923db3..d6c7dc58 100644
 --- a/cryptfs.h
 +++ b/cryptfs.h
 @@ -66,14 +66,6 @@
@@ -1042,5 +1042,5 @@ index d8923db..d6c7dc5 100644
  int cryptfs_setup_ext_volume(const char* label, const char* real_blkdev, const unsigned char* key,
                               char* out_crypto_blkdev);
 -- 
-2.21.0
+2.17.1
 
