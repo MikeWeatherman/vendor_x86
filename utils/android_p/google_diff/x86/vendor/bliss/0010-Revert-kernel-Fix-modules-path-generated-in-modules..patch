@@ -1,0 +1,27 @@
+From 35cbda228d89bd7fc716cd0b0ce70c7ce7008781 Mon Sep 17 00:00:00 2001
+From: Jackeagle <jackeagle102@gmail.com>
+Date: Mon, 6 May 2019 20:01:30 +0200
+Subject: [PATCH 10/17] Revert "kernel: Fix modules path generated in
+ modules.dep"
+
+This reverts commit 14eee4e68b90effa47a74c455d5d79511e04cb05.
+---
+ build/tasks/kernel.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/build/tasks/kernel.mk b/build/tasks/kernel.mk
+index 02f6d220..eeba2c0d 100644
+--- a/build/tasks/kernel.mk
++++ b/build/tasks/kernel.mk
+@@ -259,7 +259,7 @@ INSTALLED_KERNEL_MODULES: depmod-host
+ 			for f in $$modules; do \
+ 				$(KERNEL_TOOLCHAIN_PATH)strip --strip-unneeded $$f; \
+ 			done; \
+-			($(call build-image-kernel-modules,$$modules,$(KERNEL_MODULES_OUT),$(KERNEL_MODULE_MOUNTPOINT)/,$(KERNEL_DEPMOD_STAGING_DIR))); \
++			($(call build-image-kernel-modules,$$modules,$(KERNEL_MODULES_OUT),$(KERNEL_MODULE_MOUNTPOINT),$(KERNEL_DEPMOD_STAGING_DIR))); \
+ 		fi
+ 
+ $(TARGET_KERNEL_MODULES): TARGET_KERNEL_BINARIES
+-- 
+2.21.0
+

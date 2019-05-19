@@ -1,0 +1,35 @@
+From 5c65767ed0316f4c8227835c258451607b39ef75 Mon Sep 17 00:00:00 2001
+From: Jackeagle <jackeagle102@gmail.com>
+Date: Mon, 6 May 2019 20:01:57 +0200
+Subject: [PATCH 13/17] Revert "kernel: Detect kernel module usage better"
+
+This reverts commit fd354f2a6a73337bc89dbd77ded583617603edb0.
+---
+ build/tasks/kernel.mk | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/build/tasks/kernel.mk b/build/tasks/kernel.mk
+index 5df1ec54..6d8e2aa4 100644
+--- a/build/tasks/kernel.mk
++++ b/build/tasks/kernel.mk
+@@ -226,7 +226,7 @@ TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
+ 			echo "Building DTBs"; \
+ 			$(PATH_OVERRIDE) $(MAKE) $(KERNEL_MAKE_FLAGS) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) dtbs; \
+ 		fi
+-	$(hide) if grep -q '=m' $(KERNEL_CONFIG); then \
++	$(hide) if grep -q '^CONFIG_MODULES=y' $(KERNEL_CONFIG); then \
+ 			echo "Building Kernel Modules"; \
+ 			$(PATH_OVERRIDE) $(MAKE) $(KERNEL_MAKE_FLAGS) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) modules; \
+ 		fi
+@@ -236,7 +236,7 @@ INSTALLED_KERNEL_MODULES: depmod-host
+ 	$(hide) rm -rf $(KERNEL_MODULES_OUT)
+ 	$(hide) mkdir -p $(KERNEL_MODULES_OUT)
+ 	$(hide) rm -rf $(KERNEL_DEPMOD_STAGING_DIR)
+-	$(hide) if grep -q '=m' $(KERNEL_CONFIG); then \
++	$(hide) if grep -q '^CONFIG_MODULES=y' $(KERNEL_CONFIG); then \
+ 			echo "Installing Kernel Modules"; \
+ 			$(PATH_OVERRIDE) $(MAKE) $(KERNEL_MAKE_FLAGS) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) INSTALL_MOD_PATH=../../$(KERNEL_MODULES_INSTALL) modules_install && \
+ 			mofile=$$(find $(KERNEL_MODULES_OUT) -type f -name modules.order) && \
+-- 
+2.21.0
+

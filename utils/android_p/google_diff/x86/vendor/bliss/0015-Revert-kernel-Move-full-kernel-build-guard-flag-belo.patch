@@ -1,0 +1,36 @@
+From b2f7c8c8d7d30289272a3ab75b2c4fdc0857e5a7 Mon Sep 17 00:00:00 2001
+From: Jackeagle <jackeagle102@gmail.com>
+Date: Mon, 6 May 2019 20:02:13 +0200
+Subject: [PATCH 15/17] Revert "kernel: Move full kernel build guard flag below
+ all targets"
+
+This reverts commit 7eba3bc17cf826bb0592d3ce06a2d57e9480df1a.
+---
+ build/tasks/kernel.mk | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/build/tasks/kernel.mk b/build/tasks/kernel.mk
+index 869bc7b9..a0a095a7 100644
+--- a/build/tasks/kernel.mk
++++ b/build/tasks/kernel.mk
+@@ -333,6 +333,8 @@ alldefconfig:
+ 	env KCONFIG_NOTIMESTAMP=true \
+ 		 $(PATH_OVERRIDE) $(MAKE) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) alldefconfig
+ 
++endif # FULL_KERNEL_BUILD
++
+ TARGET_PREBUILT_DTBO = $(PRODUCT_OUT)/dtbo/arch/$(KERNEL_ARCH)/boot/dtbo.img
+ $(TARGET_PREBUILT_DTBO): $(AVBTOOL)
+ 	echo -e ${CL_GRN}"Building DTBO.img"${CL_RST}
+@@ -344,8 +346,6 @@ $(TARGET_PREBUILT_DTBO): $(AVBTOOL)
+ 		--partition_name dtbo $(INTERNAL_AVB_DTBO_SIGNING_ARGS) \
+ 		$(BOARD_AVB_DTBO_ADD_HASH_FOOTER_ARGS)
+ 
+-endif # FULL_KERNEL_BUILD
+-
+ ## Install it
+ 
+ ifeq ($(NEEDS_KERNEL_COPY),true)
+-- 
+2.21.0
+

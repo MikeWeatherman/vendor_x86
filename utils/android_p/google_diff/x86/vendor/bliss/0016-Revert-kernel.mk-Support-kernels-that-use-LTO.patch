@@ -1,7 +1,7 @@
-From 1060ed157ec50409ba74e0eaf6c45a36683477d9 Mon Sep 17 00:00:00 2001
+From 8308720b9692814cb9bf41b835fa2ef9a708dcc2 Mon Sep 17 00:00:00 2001
 From: Jackeagle <jackeagle102@gmail.com>
-Date: Mon, 3 Dec 2018 10:55:46 -0500
-Subject: [PATCH 02/15] Revert "kernel.mk: Support kernels that use LTO"
+Date: Mon, 6 May 2019 20:02:46 +0200
+Subject: [PATCH 16/17] Revert "kernel.mk: Support kernels that use LTO"
 
 This reverts commit 811524eef488f81295c876b669d8ec7a6cad9cea.
 ---
@@ -9,10 +9,10 @@ This reverts commit 811524eef488f81295c876b669d8ec7a6cad9cea.
  1 file changed, 15 insertions(+), 16 deletions(-)
 
 diff --git a/build/tasks/kernel.mk b/build/tasks/kernel.mk
-index 54812a908..7a674ee90 100644
+index a0a095a7..d0263d37 100644
 --- a/build/tasks/kernel.mk
 +++ b/build/tasks/kernel.mk
-@@ -178,9 +178,8 @@ ifeq ($(TARGET_KERNEL_CLANG_COMPILE),true)
+@@ -187,9 +187,8 @@ ifeq ($(TARGET_KERNEL_CLANG_COMPILE),true)
      else ifeq ($(KERNEL_ARCH),x86)
          KERNEL_CLANG_TRIPLE ?= CLANG_TRIPLE=x86_64-linux-gnu-
      endif
@@ -23,7 +23,7 @@ index 54812a908..7a674ee90 100644
      endif
  endif
  
-@@ -197,17 +196,17 @@ $(KERNEL_ADDITIONAL_CONFIG_OUT): force_additional_config
+@@ -206,17 +205,17 @@ $(KERNEL_ADDITIONAL_CONFIG_OUT): force_additional_config
  $(KERNEL_CONFIG): $(KERNEL_DEFCONFIG_SRC) $(KERNEL_ADDITIONAL_CONFIG_OUT)
  	@echo "Building Kernel Config"
  	$(hide) mkdir -p $(KERNEL_OUT)
@@ -45,7 +45,7 @@ index 54812a908..7a674ee90 100644
  
  .PHONY: TARGET_KERNEL_BINARIES
  TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
-@@ -215,21 +214,21 @@ TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
+@@ -224,21 +223,21 @@ TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
  	$(hide) rm -rf $(KERNEL_MODULES_OUT)
  	$(hide) mkdir -p $(KERNEL_MODULES_OUT)
  	$(hide) rm -rf $(KERNEL_DEPMOD_STAGING_DIR)
@@ -71,14 +71,16 @@ index 54812a908..7a674ee90 100644
  			mofile=$$(find $(KERNEL_MODULES_OUT) -type f -name modules.order) && \
  			mpath=$$(dirname $$mofile) && \
  			for f in $$(find $$mpath/kernel -type f -name '*.ko'); do \
-@@ -250,29 +249,29 @@ $(TARGET_PREBUILT_INT_KERNEL): $(TARGET_KERNEL_MODULES)
+@@ -306,7 +305,7 @@ $(KERNEL_HEADERS_INSTALL_DIR): $(KERNEL_HEADERS_INSTALL_DEPS)
  .PHONY: kerneltags
  kerneltags: $(KERNEL_CONFIG)
  	$(hide) mkdir -p $(KERNEL_OUT)
 -	$(PATH_OVERRIDE) $(MAKE) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) tags
 +	$(MAKE) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) tags
  
- .PHONY: kernelsavedefconfig alldefconfig
+ .PHONY: kernelconfig kernelxconfig kernelsavedefconfig alldefconfig
+ 
+@@ -323,23 +322,23 @@ kernelxconfig kernelconfig:
  
  kernelsavedefconfig:
  	$(hide) mkdir -p $(KERNEL_OUT)
@@ -108,5 +110,5 @@ index 54812a908..7a674ee90 100644
  		--image $@ \
  		--partition_size $(BOARD_DTBOIMG_PARTITION_SIZE) \
 -- 
-2.17.1
+2.21.0
 

@@ -1,0 +1,38 @@
+From 4e33951109cb6188e0a5b144838aec3e267351a9 Mon Sep 17 00:00:00 2001
+From: Jackeagle <jackeagle102@gmail.com>
+Date: Mon, 6 May 2019 20:02:05 +0200
+Subject: [PATCH 14/17] Revert "kernel: Move kernel module dir cleanup/creation
+ to module install target"
+
+This reverts commit bfc20a2ec6d7d5d3bf90e6273e2406f5f2259508.
+---
+ build/tasks/kernel.mk | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/build/tasks/kernel.mk b/build/tasks/kernel.mk
+index 6d8e2aa4..869bc7b9 100644
+--- a/build/tasks/kernel.mk
++++ b/build/tasks/kernel.mk
+@@ -221,6 +221,9 @@ $(KERNEL_CONFIG): $(KERNEL_DEFCONFIG_SRC) $(KERNEL_ADDITIONAL_CONFIG_OUT)
+ .PHONY: TARGET_KERNEL_BINARIES
+ TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
+ 	@echo "Building Kernel"
++	$(hide) rm -rf $(KERNEL_MODULES_OUT)
++	$(hide) mkdir -p $(KERNEL_MODULES_OUT)
++	$(hide) rm -rf $(KERNEL_DEPMOD_STAGING_DIR)
+ 	$(PATH_OVERRIDE) $(MAKE) $(KERNEL_MAKE_FLAGS) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) $(BOARD_KERNEL_IMAGE_NAME)
+ 	$(hide) if grep -q '^CONFIG_OF=y' $(KERNEL_CONFIG); then \
+ 			echo "Building DTBs"; \
+@@ -233,9 +236,6 @@ TARGET_KERNEL_BINARIES: $(KERNEL_CONFIG)
+ 
+ .PHONY: INSTALLED_KERNEL_MODULES
+ INSTALLED_KERNEL_MODULES: depmod-host
+-	$(hide) rm -rf $(KERNEL_MODULES_OUT)
+-	$(hide) mkdir -p $(KERNEL_MODULES_OUT)
+-	$(hide) rm -rf $(KERNEL_DEPMOD_STAGING_DIR)
+ 	$(hide) if grep -q '^CONFIG_MODULES=y' $(KERNEL_CONFIG); then \
+ 			echo "Installing Kernel Modules"; \
+ 			$(PATH_OVERRIDE) $(MAKE) $(KERNEL_MAKE_FLAGS) -C $(KERNEL_SRC) O=$(KERNEL_OUT) ARCH=$(KERNEL_ARCH) $(KERNEL_CROSS_COMPILE) $(KERNEL_CLANG_TRIPLE) $(KERNEL_CC) INSTALL_MOD_PATH=../../$(KERNEL_MODULES_INSTALL) modules_install && \
+-- 
+2.21.0
+
