@@ -1,3 +1,5 @@
+LOCAL_PATH := $(call my-dir)
+
 # Copy files
 
 define addon-copy-to-system
