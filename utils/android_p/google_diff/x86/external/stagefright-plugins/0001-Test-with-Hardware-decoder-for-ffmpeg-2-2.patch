@@ -1,0 +1,1503 @@
+From 6313f36adf33b3c7ed7a1d10cede0a6958cd9e46 Mon Sep 17 00:00:00 2001
+From: Jon West <electrikjesus@gmail.com>
+Date: Fri, 31 May 2019 21:10:13 -0400
+Subject: [PATCH] Test with Hardware decoder for ffmpeg (2/2)
+
+From Michael Goffioul
+https://groups.google.com/forum/#!topic/android-x86/wceA06d3NVs
+---
+ Android.mk                    |   2 +-
+ extractor/Android.mk          |   3 +-
+ extractor/FFmpegExtractor.cpp | 229 ++++++++++++-------------
+ extractor/FFmpegExtractor.h   |  22 +--
+ omx/Android.mk                |   1 +
+ omx/FFmpegOMXPlugin.cpp       |   2 -
+ omx/SoftFFmpegVideo.cpp       |   4 +-
+ utils/Android.mk              |   5 +-
+ utils/codec_utils.cpp         | 310 ++++++++++++++++------------------
+ utils/codec_utils.h           |  62 +++----
+ utils/ffmpeg_source.cpp       |   2 +-
+ utils/ffmpeg_utils.cpp        |   5 -
+ 12 files changed, 312 insertions(+), 335 deletions(-)
+
+diff --git a/Android.mk b/Android.mk
+index 00b6d32..8e17da6 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -21,4 +21,4 @@ LOCAL_PATH := $(call my-dir)
+ SF_COMMON_MK := $(LOCAL_PATH)/common.mk
+ AV_CODEC_LIB := $(if $(filter true,$(BOARD_USE_LIBAV)),libav,ffmpeg)
+ 
+-#include $(call first-makefiles-under,$(LOCAL_PATH))
++include $(call first-makefiles-under,$(LOCAL_PATH))
+diff --git a/extractor/Android.mk b/extractor/Android.mk
+index e4729e0..69e450f 100644
+--- a/extractor/Android.mk
++++ b/extractor/Android.mk
+@@ -7,10 +7,11 @@ LOCAL_SRC_FILES := \
+ 
+ LOCAL_SHARED_LIBRARIES += \
+ 	libbinder         \
+-	libmedia          \
++	libmediaextractor \
+ 	libffmpeg_utils   \
+ 	liblog            \
+ 
+ LOCAL_MODULE:= libffmpeg_extractor
++LOCAL_MODULE_RELATIVE_PATH := extractors
+ 
+ include $(BUILD_SHARED_LIBRARY)
+diff --git a/extractor/FFmpegExtractor.cpp b/extractor/FFmpegExtractor.cpp
+index aa5a970..4a952dc 100644
+--- a/extractor/FFmpegExtractor.cpp
++++ b/extractor/FFmpegExtractor.cpp
+@@ -26,20 +26,20 @@
+ #include <utils/misc.h>
+ #include <utils/String8.h>
+ #include <cutils/properties.h>
++#include <media/DataSource.h>
++#include <media/MediaSource.h>
+ #include <media/stagefright/foundation/ABitReader.h>
+ #include <media/stagefright/foundation/ABuffer.h>
+ #include <media/stagefright/foundation/ADebug.h>
+ #include <media/stagefright/foundation/AMessage.h>
++#include <media/stagefright/foundation/avc_utils.h>
+ #include <media/stagefright/foundation/hexdump.h>
+-#include <media/stagefright/DataSource.h>
+ #include <media/stagefright/MediaBuffer.h>
+ #include <media/stagefright/foundation/ADebug.h>
+ #include <media/stagefright/MediaDefs.h>
+ #include <media/stagefright/MediaErrors.h>
+-#include <media/stagefright/MediaSource.h>
+ #include <media/stagefright/MetaData.h>
+ #include <media/stagefright/Utils.h>
+-#include "include/avc_utils.h"
+ 
+ #include "utils/codec_utils.h"
+ #include "utils/ffmpeg_cmdutils.h"
+@@ -70,15 +70,15 @@ enum {
+ 
+ namespace android {
+ 
+-struct FFmpegSource : public MediaSource {
+-    FFmpegSource(const sp<FFmpegExtractor> &extractor, size_t index);
++struct FFmpegSource : public MediaTrack {
++    FFmpegSource(FFmpegExtractor *extractor, size_t index);
+ 
+-    virtual status_t start(MetaData *params);
++    virtual status_t start(MetaDataBase *params);
+     virtual status_t stop();
+-    virtual sp<MetaData> getFormat();
++    virtual status_t getFormat(MetaDataBase &meta);
+ 
+     virtual status_t read(
+-            MediaBuffer **buffer, const ReadOptions *options);
++            MediaBufferBase **buffer, const ReadOptions *options);
+ 
+ protected:
+     virtual ~FFmpegSource();
+@@ -86,7 +86,7 @@ protected:
+ private:
+     friend struct FFmpegExtractor;
+ 
+-    sp<FFmpegExtractor> mExtractor;
++    FFmpegExtractor *mExtractor;
+     size_t mTrackIndex;
+ 
+     enum AVMediaType mMediaType;
+@@ -112,7 +112,6 @@ private:
+ 
+ FFmpegExtractor::FFmpegExtractor(const sp<DataSource> &source, const sp<AMessage> &meta)
+     : mDataSource(source),
+-      mMeta(new MetaData),
+       mInitCheck(NO_INIT),
+       mFormatCtx(NULL),
+       mReaderThreadStarted(false),
+@@ -159,7 +158,7 @@ size_t FFmpegExtractor::countTracks() {
+     return mInitCheck == OK ? mTracks.size() : 0;
+ }
+ 
+-sp<IMediaSource> FFmpegExtractor::getTrack(size_t index) {
++MediaTrack* FFmpegExtractor::getTrack(size_t index) {
+     ALOGV("FFmpegExtractor::getTrack[%zu]", index);
+ 
+     if (mInitCheck != OK) {
+@@ -173,32 +172,33 @@ sp<IMediaSource> FFmpegExtractor::getTrack(size_t index) {
+     return new FFmpegSource(this, index);
+ }
+ 
+-sp<MetaData> FFmpegExtractor::getTrackMetaData(size_t index, uint32_t flags __unused) {
++status_t FFmpegExtractor::getTrackMetaData(MetaDataBase &meta, size_t index, uint32_t flags __unused) {
+     ALOGV("FFmpegExtractor::getTrackMetaData[%zu]", index);
+ 
+     if (mInitCheck != OK) {
+-        return NULL;
++        return UNKNOWN_ERROR;
+     }
+ 
+     if (index >= mTracks.size()) {
+-        return NULL;
++        return UNKNOWN_ERROR;
+     }
+ 
+     /* Quick and dirty, just get a frame 1/4 in */
+     if (mTracks.itemAt(index).mIndex == mVideoStreamIdx &&
+             mFormatCtx->duration != AV_NOPTS_VALUE) {
+-        mTracks.itemAt(index).mMeta->setInt64(
++        mTracks.editItemAt(index).mMeta.setInt64(
+                 kKeyThumbnailTime, mFormatCtx->duration / 4);
+     }
+ 
+-    return mTracks.itemAt(index).mMeta;
++    meta = mTracks.itemAt(index).mMeta;
++    return OK;
+ }
+ 
+-sp<MetaData> FFmpegExtractor::getMetaData() {
++status_t FFmpegExtractor::getMetaData(MetaDataBase &meta) {
+     ALOGV("FFmpegExtractor::getMetaData");
+ 
+     if (mInitCheck != OK) {
+-        return NULL;
++        return UNKNOWN_ERROR;
+     }
+ 
+     if (!mParsedMetadata) {
+@@ -206,7 +206,8 @@ sp<MetaData> FFmpegExtractor::getMetaData() {
+         mParsedMetadata = true;
+     }
+ 
+-    return mMeta;
++    meta = mMeta;
++    return OK;
+ }
+ 
+ uint32_t FFmpegExtractor::flags() const {
+@@ -360,10 +361,10 @@ bool FFmpegExtractor::is_codec_supported(enum AVCodecID codec_id)
+     return supported;
+ }
+ 
+-sp<MetaData> FFmpegExtractor::setVideoFormat(AVStream *stream)
++status_t FFmpegExtractor::setVideoFormat(AVStream *stream, MetaDataBase &meta)
+ {
+     AVCodecContext *avctx = NULL;
+-    sp<MetaData> meta = NULL;
++    status_t ret = UNKNOWN_ERROR;
+ 
+     avctx = stream->codec;
+     CHECK_EQ((int)avctx->codec_type, (int)AVMEDIA_TYPE_VIDEO);
+@@ -371,70 +372,69 @@ sp<MetaData> FFmpegExtractor::setVideoFormat(AVStream *stream)
+     switch(avctx->codec_id) {
+     case AV_CODEC_ID_H264:
+         if (avctx->extradata[0] == 1) {
+-            meta = setAVCFormat(avctx);
++            ret = setAVCFormat(avctx, meta);
+         } else {
+-            meta = setH264Format(avctx);
++            ret = setH264Format(avctx, meta);
+         }
+         break;
+     case AV_CODEC_ID_MPEG4:
+-        meta = setMPEG4Format(avctx);
++        ret = setMPEG4Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_H263:
+     case AV_CODEC_ID_H263P:
+     case AV_CODEC_ID_H263I:
+-        meta = setH263Format(avctx);
++        ret = setH263Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_MPEG1VIDEO:
+     case AV_CODEC_ID_MPEG2VIDEO:
+-        meta = setMPEG2VIDEOFormat(avctx);
++        ret = setMPEG2VIDEOFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_VC1:
+-        meta = setVC1Format(avctx);
++        ret = setVC1Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMV1:
+-        meta = setWMV1Format(avctx);
++        ret = setWMV1Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMV2:
+-        meta = setWMV2Format(avctx);
++        ret = setWMV2Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMV3:
+-        meta = setWMV3Format(avctx);
++        ret = setWMV3Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_RV20:
+-        meta = setRV20Format(avctx);
++        ret = setRV20Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_RV30:
+-        meta = setRV30Format(avctx);
++        ret = setRV30Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_RV40:
+-        meta = setRV40Format(avctx);
++        ret = setRV40Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_FLV1:
+-        meta = setFLV1Format(avctx);
++        ret = setFLV1Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_HEVC:
+-        meta = setHEVCFormat(avctx);
++        ret = setHEVCFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_VP8:
+-        meta = setVP8Format(avctx);
++        ret = setVP8Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_VP9:
+-        meta = setVP9Format(avctx);
++        ret = setVP9Format(avctx, meta);
+         break;
+     default:
+         ALOGD("unsupported video codec (id: %d, name: %s), but give it a chance",
+                 avctx->codec_id, avcodec_get_name(avctx->codec_id));
+-        meta = new MetaData;
+-        meta->setInt32(kKeyCodecId, avctx->codec_id);
+-        meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_FFMPEG);
++        meta.setInt32(kKeyCodecId, avctx->codec_id);
++        meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_FFMPEG);
+         if (avctx->extradata_size > 0) {
+-            meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++            meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+         }
+         //CHECK(!"Should not be here. Unsupported codec.");
+         break;
+     }
+ 
+-    if (meta != NULL) {
++    if (ret == OK) {
+         // rotation
+         double theta = get_rotation(stream);
+         int rotationDegrees = 0;
+@@ -447,11 +447,11 @@ sp<MetaData> FFmpegExtractor::setVideoFormat(AVStream *stream)
+             rotationDegrees = 270;
+         }
+         if (rotationDegrees != 0) {
+-            meta->setInt32(kKeyRotation, rotationDegrees);
++            meta.setInt32(kKeyRotation, rotationDegrees);
+         }
+     }
+ 
+-    if (meta != NULL) {
++    if (ret == OK) {
+         float aspect_ratio;
+         int width, height;
+ 
+@@ -471,90 +471,89 @@ sp<MetaData> FFmpegExtractor::setVideoFormat(AVStream *stream)
+         ALOGI("width: %d, height: %d, bit_rate: % " PRId64 " aspect ratio: %f",
+                 avctx->width, avctx->height, avctx->bit_rate, aspect_ratio);
+ 
+-        meta->setInt32(kKeyWidth, avctx->width);
+-        meta->setInt32(kKeyHeight, avctx->height);
++        meta.setInt32(kKeyWidth, avctx->width);
++        meta.setInt32(kKeyHeight, avctx->height);
+         if ((width > 0) && (height > 0) &&
+             ((avctx->width != width || avctx->height != height))) {
+-            meta->setInt32(kKeySARWidth, width);
+-            meta->setInt32(kKeySARHeight, height);
++            meta.setInt32(kKeySARWidth, width);
++            meta.setInt32(kKeySARHeight, height);
+             ALOGI("SAR width: %d, SAR height: %d", width, height);
+         }
+         if (avctx->bit_rate > 0) {
+-            meta->setInt32(kKeyBitRate, avctx->bit_rate);
++            meta.setInt32(kKeyBitRate, avctx->bit_rate);
+         }
+-        meta->setCString('ffmt', findMatchingContainer(mFormatCtx->iformat->name));
++        meta.setCString('ffmt', findMatchingContainer(mFormatCtx->iformat->name));
+         setDurationMetaData(stream, meta);
+     }
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> FFmpegExtractor::setAudioFormat(AVStream *stream)
++status_t FFmpegExtractor::setAudioFormat(AVStream *stream, MetaDataBase &meta)
+ {
+     AVCodecContext *avctx = NULL;
+-    sp<MetaData> meta = NULL;
++    status_t ret = UNKNOWN_ERROR;
+ 
+     avctx = stream->codec;
+     CHECK_EQ((int)avctx->codec_type, (int)AVMEDIA_TYPE_AUDIO);
+ 
+     switch(avctx->codec_id) {
+     case AV_CODEC_ID_MP2:
+-        meta = setMP2Format(avctx);
++        ret = setMP2Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_MP3:
+-        meta = setMP3Format(avctx);
++        ret = setMP3Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_VORBIS:
+-        meta = setVORBISFormat(avctx);
++        ret = setVORBISFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_AC3:
+-        meta = setAC3Format(avctx);
++        ret = setAC3Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_AAC:
+-        meta = setAACFormat(avctx);
++        ret = setAACFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMAV1:
+-        meta = setWMAV1Format(avctx);
++        ret = setWMAV1Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMAV2:
+-        meta = setWMAV2Format(avctx);
++        ret = setWMAV2Format(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMAPRO:
+-        meta = setWMAProFormat(avctx);
++        ret = setWMAProFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_WMALOSSLESS:
+-        meta = setWMALossLessFormat(avctx);
++        ret = setWMALossLessFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_COOK:
+-        meta = setRAFormat(avctx);
++        ret = setRAFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_APE:
+-        meta = setAPEFormat(avctx);
++        ret = setAPEFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_DTS:
+-        meta = setDTSFormat(avctx);
++        ret = setDTSFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_FLAC:
+-        meta = setFLACFormat(avctx);
++        ret = setFLACFormat(avctx, meta);
+         break;
+     case AV_CODEC_ID_ALAC:
+-        meta = setALACFormat(avctx);
++        ret = setALACFormat(avctx, meta);
+         break;
+     default:
+         ALOGD("unsupported audio codec (id: %d, name: %s), but give it a chance",
+                 avctx->codec_id, avcodec_get_name(avctx->codec_id));
+-        meta = new MetaData;
+-        meta->setInt32(kKeyCodecId, avctx->codec_id);
+-        meta->setInt32(kKeyCodedSampleBits, avctx->bits_per_coded_sample);
+-        meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_FFMPEG);
++        meta.setInt32(kKeyCodecId, avctx->codec_id);
++        meta.setInt32(kKeyCodedSampleBits, avctx->bits_per_coded_sample);
++        meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_FFMPEG);
+         if (avctx->extradata_size > 0) {
+-            meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++            meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+         }
+         //CHECK(!"Should not be here. Unsupported codec.");
+         break;
+     }
+ 
+-    if (meta != NULL) {
++    if (ret == OK) {
+         ALOGD("bit_rate: %" PRId64 ", sample_rate: %d, channels: %d, "
+                 "bits_per_coded_sample: %d, block_align: %d "
+                 "bits_per_raw_sample: %d, sample_format: %d",
+@@ -562,24 +561,24 @@ sp<MetaData> FFmpegExtractor::setAudioFormat(AVStream *stream)
+                 avctx->bits_per_coded_sample, avctx->block_align,
+                 avctx->bits_per_raw_sample, avctx->sample_fmt);
+ 
+-        meta->setInt32(kKeyChannelCount, avctx->channels);
+-        meta->setInt32(kKeyBitRate, avctx->bit_rate);
++        meta.setInt32(kKeyChannelCount, avctx->channels);
++        meta.setInt32(kKeyBitRate, avctx->bit_rate);
+         int32_t bits = avctx->bits_per_raw_sample > 0 ?
+                 avctx->bits_per_raw_sample :
+                 av_get_bytes_per_sample(avctx->sample_fmt) * 8;
+-        meta->setInt32(kKeyBitsPerRawSample, bits);
+-        meta->setInt32(kKeySampleRate, avctx->sample_rate);
+-        meta->setInt32(kKeyBlockAlign, avctx->block_align);
+-        meta->setInt32(kKeySampleFormat, avctx->sample_fmt);
+-        //meta->setInt32(kKeyPcmEncoding, sampleFormatToEncoding(avctx->sample_fmt));
+-        meta->setCString('ffmt', findMatchingContainer(mFormatCtx->iformat->name));
++        meta.setInt32(kKeyBitsPerRawSample, bits);
++        meta.setInt32(kKeySampleRate, avctx->sample_rate);
++        meta.setInt32(kKeyBlockAlign, avctx->block_align);
++        meta.setInt32(kKeySampleFormat, avctx->sample_fmt);
++        //meta.setInt32(kKeyPcmEncoding, sampleFormatToEncoding(avctx->sample_fmt));
++        meta.setCString('ffmt', findMatchingContainer(mFormatCtx->iformat->name));
+         setDurationMetaData(stream, meta);
+     }
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-void FFmpegExtractor::setDurationMetaData(AVStream *stream, sp<MetaData> &meta)
++void FFmpegExtractor::setDurationMetaData(AVStream *stream, MetaDataBase &meta)
+ {
+     AVCodecContext *avctx = stream->codec;
+ 
+@@ -592,10 +591,10 @@ void FFmpegExtractor::setDurationMetaData(AVStream *stream, sp<MetaData> &meta)
+         } else {
+             ALOGV("%s startTime:N/A", s);
+         }
+-        meta->setInt64(kKeyDuration, duration);
++        meta.setInt64(kKeyDuration, duration);
+     } else {
+         // default when no stream duration
+-        meta->setInt64(kKeyDuration, mFormatCtx->duration);
++        meta.setInt64(kKeyDuration, mFormatCtx->duration);
+     }
+ }
+ 
+@@ -603,11 +602,7 @@ int FFmpegExtractor::stream_component_open(int stream_index)
+ {
+     TrackInfo *trackInfo = NULL;
+     AVCodecContext *avctx = NULL;
+-    sp<MetaData> meta = NULL;
+     bool supported = false;
+-    uint32_t type = 0;
+-    const void *data = NULL;
+-    size_t size = 0;
+     int ret = 0;
+ 
+     ALOGI("stream_index: %d", stream_index);
+@@ -627,7 +622,6 @@ int FFmpegExtractor::stream_component_open(int stream_index)
+     }
+     ALOGI("support the codec(%s) disposition(%x)", avcodec_get_name(avctx->codec_id), mFormatCtx->streams[stream_index]->disposition);
+ 
+-    unsigned streamType;
+     for (size_t i = 0; i < mTracks.size(); ++i) {
+         if (stream_index == mTracks.editItemAt(i).mIndex) {
+             ALOGE("this track already exists");
+@@ -641,6 +635,8 @@ int FFmpegExtractor::stream_component_open(int stream_index)
+     av_get_codec_tag_string(tagbuf, sizeof(tagbuf), avctx->codec_tag);
+     ALOGV("Tag %s/0x%08x with codec(%s)\n", tagbuf, avctx->codec_tag, avcodec_get_name(avctx->codec_id));
+ 
++    MetaDataBase meta;
++
+     switch (avctx->codec_type) {
+     case AVMEDIA_TYPE_VIDEO:
+         if (mVideoStreamIdx == -1)
+@@ -667,8 +663,7 @@ int FFmpegExtractor::stream_component_open(int stream_index)
+             ALOGV("video stream no extradata, but we can ignore it.");
+         }
+ #endif
+-        meta = setVideoFormat(mVideoStream);
+-        if (meta == NULL) {
++        if (setVideoFormat(mVideoStream, meta) != OK) {
+             ALOGE("setVideoFormat failed");
+             return -1;
+         }
+@@ -709,8 +704,7 @@ int FFmpegExtractor::stream_component_open(int stream_index)
+             ALOGV("audio stream no extradata, but we can ignore it.");
+         }
+ #endif
+-        meta = setAudioFormat(mAudioStream);
+-        if (meta == NULL) {
++        if (setAudioFormat(mAudioStream, meta) != OK) {
+             ALOGE("setAudioFormat failed");
+             return -1;
+         }
+@@ -876,7 +870,7 @@ void FFmpegExtractor::fetchStuffsFromSniffedMeta(const sp<AMessage> &meta)
+     //mime
+     CHECK(meta->findString("extended-extractor-mime", &mime));
+     CHECK(mime.c_str() != NULL);
+-    mMeta->setCString(kKeyMIMEType, mime.c_str());
++    mMeta.setCString(kKeyMIMEType, mime.c_str());
+ }
+ 
+ void FFmpegExtractor::setFFmpegDefaultOpts()
+@@ -922,9 +916,7 @@ int FFmpegExtractor::initStreams()
+ {
+     int err = 0;
+     int i = 0;
+-    int eof = 0;
+     int ret = 0, audio_ret = -1, video_ret = -1;
+-    int pkt_in_play_range = 0;
+     AVDictionaryEntry *t = NULL;
+     AVDictionary **opts = NULL;
+     int orig_nb_streams = 0;
+@@ -935,7 +927,6 @@ int FFmpegExtractor::initStreams()
+     wanted_stream[AVMEDIA_TYPE_AUDIO]  = -1;
+     wanted_stream[AVMEDIA_TYPE_VIDEO]  = -1;
+     AVDictionary *format_opts = NULL, *codec_opts = NULL;
+-    const char *mime = NULL;
+ 
+     setFFmpegDefaultOpts();
+ 
+@@ -1120,10 +1111,9 @@ void *FFmpegExtractor::ReaderWrapper(void *me) {
+ }
+ 
+ void FFmpegExtractor::readerEntry() {
+-    int err, i, ret;
++    int ret;
+     AVPacket pkt1, *pkt = &pkt1;
+     int eof = 0;
+-    int pkt_in_play_range = 0;
+ 
+     mLock.lock();
+ 
+@@ -1323,7 +1313,7 @@ fail:
+ ////////////////////////////////////////////////////////////////////////////////
+ 
+ FFmpegSource::FFmpegSource(
+-        const sp<FFmpegExtractor> &extractor, size_t index)
++        FFmpegExtractor *extractor, size_t index)
+     : mExtractor(extractor),
+       mTrackIndex(index),
+       mIsAVC(false),
+@@ -1333,7 +1323,7 @@ FFmpegSource::FFmpegSource(
+       mQueue(mExtractor->mTracks.itemAt(index).mQueue),
+       mLastPTS(AV_NOPTS_VALUE),
+       mTargetTime(AV_NOPTS_VALUE) {
+-    sp<MetaData> meta = mExtractor->mTracks.itemAt(index).mMeta;
++    const MetaDataBase& meta = mExtractor->mTracks.itemAt(index).mMeta;
+ 
+     {
+         AVCodecContext *avctx = mStream->codec;
+@@ -1347,7 +1337,7 @@ FFmpegSource::FFmpegSource(
+             uint32_t type;
+             const void *data;
+             size_t size;
+-            CHECK(meta->findData(kKeyAVCC, &type, &data, &size));
++            CHECK(meta.findData(kKeyAVCC, &type, &data, &size));
+ 
+             const uint8_t *ptr = (const uint8_t *)data;
+ 
+@@ -1373,7 +1363,7 @@ FFmpegSource::FFmpegSource(
+             uint32_t type;
+             const void *data;
+             size_t size;
+-            CHECK(meta->findData(kKeyHVCC, &type, &data, &size));
++            CHECK(meta.findData(kKeyHVCC, &type, &data, &size));
+ 
+             const uint8_t *ptr = (const uint8_t *)data;
+ 
+@@ -1400,7 +1390,7 @@ FFmpegSource::~FFmpegSource() {
+     mExtractor = NULL;
+ }
+ 
+-status_t FFmpegSource::start(MetaData * /* params */) {
++status_t FFmpegSource::start(MetaDataBase * /* params */) {
+     ALOGV("FFmpegSource::start %s",
+             av_get_media_type_string(mMediaType));
+     return OK;
+@@ -1412,12 +1402,13 @@ status_t FFmpegSource::stop() {
+     return OK;
+ }
+ 
+-sp<MetaData> FFmpegSource::getFormat() {
+-    return mExtractor->mTracks.itemAt(mTrackIndex).mMeta;;
++status_t FFmpegSource::getFormat(MetaDataBase &meta) {
++    meta = mExtractor->mTracks.itemAt(mTrackIndex).mMeta;
++    return OK;
+ }
+ 
+ status_t FFmpegSource::read(
+-        MediaBuffer **buffer, const ReadOptions *options) {
++        MediaBufferBase **buffer, const ReadOptions *options) {
+     *buffer = NULL;
+ 
+     AVPacket pkt;
+@@ -1496,7 +1487,7 @@ retry:
+     }
+ 
+     MediaBuffer *mediaBuffer = new MediaBuffer(pkt.size + AV_INPUT_BUFFER_PADDING_SIZE);
+-    mediaBuffer->meta_data()->clear();
++    mediaBuffer->meta_data().clear();
+     mediaBuffer->set_range(0, pkt.size);
+ 
+     //copy data
+@@ -1567,14 +1558,14 @@ retry:
+             av_get_media_type_string(mMediaType), pkt.size, key);
+ #endif
+ 
+-    mediaBuffer->meta_data()->setInt64(kKeyTime, timeUs);
+-    mediaBuffer->meta_data()->setInt32(kKeyIsSyncFrame, key);
++    mediaBuffer->meta_data().setInt64(kKeyTime, timeUs);
++    mediaBuffer->meta_data().setInt32(kKeyIsSyncFrame, key);
+ 
+     // deal with seek-to-exact-frame, we might be off a bit and Stagefright will assert on us
+     if (seekTimeUs != AV_NOPTS_VALUE && timeUs < seekTimeUs &&
+             mode == MediaSource::ReadOptions::SEEK_CLOSEST) {
+         mTargetTime = seekTimeUs;
+-        mediaBuffer->meta_data()->setInt64(kKeyTargetTime, seekTimeUs);
++        mediaBuffer->meta_data().setInt64(kKeyTargetTime, seekTimeUs);
+     }
+ 
+     if (mTargetTime != AV_NOPTS_VALUE) {
+@@ -1582,7 +1573,7 @@ retry:
+             mTargetTime = AV_NOPTS_VALUE;
+         } else if (nextPTS != AV_NOPTS_VALUE && nextPTS > mTargetTime) {
+             ALOGV("adjust target frame time to %" PRId64, timeUs);
+-            mediaBuffer->meta_data()->setInt64(kKeyTime, mTargetTime);
++            mediaBuffer->meta_data().setInt64(kKeyTime, mTargetTime);
+             mTargetTime = AV_NOPTS_VALUE;
+         }
+     }
+@@ -1658,7 +1649,6 @@ static enum AVCodecID getCodecId(AVFormatContext *ic, AVMediaType codec_type)
+ 
+ static bool hasAudioCodecOnly(AVFormatContext *ic)
+ {
+-    enum AVCodecID codec_id = AV_CODEC_ID_NONE;
+     bool haveVideo = false;
+     bool haveAudio = false;
+ 
+@@ -2259,6 +2249,17 @@ MediaExtractor *CreateFFMPEGExtractor(const sp<DataSource> &source, const char *
+     return ret;
+ }
+ 
++__attribute__ ((visibility ("default")))
++MediaExtractor::ExtractorDef GETEXTRACTORDEF() {
++    return {
++        MediaExtractor::EXTRACTORDEF_VERSION,
++        UUID("4fd80eae-03d2-4d72-9eb9-48fa6bb54613"),
++        1, // version
++        "AAC Extractor",
++        Sniff
++    };
++}
++
+ }
+ 
+ };  // namespace android
+diff --git a/extractor/FFmpegExtractor.h b/extractor/FFmpegExtractor.h
+index 6c147eb..a648cef 100644
+--- a/extractor/FFmpegExtractor.h
++++ b/extractor/FFmpegExtractor.h
+@@ -18,11 +18,11 @@
+ 
+ #define SUPER_EXTRACTOR_H_
+ 
++#include <media/MediaExtractor.h>
++#include <media/MediaSource.h>
+ #include <media/stagefright/foundation/ABase.h>
+-#include <media/stagefright/MediaExtractor.h>
+ #include <utils/threads.h>
+ #include <utils/KeyedVector.h>
+-#include <media/stagefright/MediaSource.h>
+ 
+ #include "utils/ffmpeg_utils.h"
+ 
+@@ -37,10 +37,10 @@ struct FFmpegExtractor : public MediaExtractor {
+     FFmpegExtractor(const sp<DataSource> &source, const sp<AMessage> &meta);
+ 
+     virtual size_t countTracks();
+-    virtual sp<IMediaSource> getTrack(size_t index);
+-    virtual sp<MetaData> getTrackMetaData(size_t index, uint32_t flags);
++    virtual MediaTrack* getTrack(size_t index);
++    virtual status_t getTrackMetaData(MetaDataBase &meta, size_t index, uint32_t flags);
+ 
+-    virtual sp<MetaData> getMetaData();
++    virtual status_t getMetaData(MetaDataBase &meta);
+ 
+     virtual uint32_t flags() const;
+ 
+@@ -52,7 +52,7 @@ private:
+ 
+     struct TrackInfo {
+         int mIndex; //stream index
+-        sp<MetaData> mMeta;
++        MetaDataBase mMeta;
+         AVStream *mStream;
+         PacketQueue *mQueue;
+     };
+@@ -64,7 +64,7 @@ private:
+     Condition mCondition;
+ 
+     sp<DataSource> mDataSource;
+-    sp<MetaData> mMeta;
++    MetaDataBase mMeta;
+     status_t mInitCheck;
+ 
+     char mFilename[PATH_MAX];
+@@ -112,9 +112,9 @@ private:
+     void setFFmpegDefaultOpts();
+     void printTime(int64_t time);
+     bool is_codec_supported(enum AVCodecID codec_id);
+-    sp<MetaData> setVideoFormat(AVStream *stream);
+-    sp<MetaData> setAudioFormat(AVStream *stream);
+-    void setDurationMetaData(AVStream *stream, sp<MetaData> &meta);
++    status_t setVideoFormat(AVStream *stream, MetaDataBase &meta);
++    status_t setAudioFormat(AVStream *stream, MetaDataBase &meta);
++    void setDurationMetaData(AVStream *stream, MetaDataBase &meta);
+     int stream_component_open(int stream_index);
+     void stream_component_close(int stream_index);
+     void reachedEOS(enum AVMediaType media_type);
+@@ -134,6 +134,7 @@ private:
+     DISALLOW_EVIL_CONSTRUCTORS(FFmpegExtractor);
+ };
+ 
++/*
+ extern "C" {
+ 
+ static const char *findMatchingContainer(const char *name);
+@@ -146,6 +147,7 @@ MediaExtractor* CreateFFMPEGExtractor(const sp<DataSource> &source,
+         const char *mime, const sp<AMessage> &meta);
+ 
+ }
++*/
+ 
+ }  // namespace android
+ 
+diff --git a/omx/Android.mk b/omx/Android.mk
+index 8cfa2a9..647a299 100644
+--- a/omx/Android.mk
++++ b/omx/Android.mk
+@@ -14,6 +14,7 @@ LOCAL_C_INCLUDES += \
+ LOCAL_SHARED_LIBRARIES += \
+ 	libdl             \
+ 	libffmpeg_utils   \
++	android.hidl.memory@1.0	\
+ 	$(if $(filter true,$(BOARD_USE_LIBAV)),libavresample,libswresample) \
+ 	liblog            \
+ 	libnativewindow   \
+diff --git a/omx/FFmpegOMXPlugin.cpp b/omx/FFmpegOMXPlugin.cpp
+index 086b81d..764df2e 100644
+--- a/omx/FFmpegOMXPlugin.cpp
++++ b/omx/FFmpegOMXPlugin.cpp
+@@ -85,8 +85,6 @@ OMX_ERRORTYPE FFmpegOMXPlugin::destroyComponentInstance(
+ 
+     me->prepareForDestruction();
+ 
+-    void *libHandle = me->libHandle();
+-
+     CHECK_EQ(me->getStrongCount(), 1);
+     me->decStrong(this);
+     me = NULL;
+diff --git a/omx/SoftFFmpegVideo.cpp b/omx/SoftFFmpegVideo.cpp
+index ae1f1ae..028e7c3 100644
+--- a/omx/SoftFFmpegVideo.cpp
++++ b/omx/SoftFFmpegVideo.cpp
+@@ -515,7 +515,7 @@ void SoftFFmpegVideo::initPacket(AVPacket *pkt,
+ }
+ 
+ int32_t SoftFFmpegVideo::decodeVideo() {
+-    int len = 0, err = 0;
++    int err = 0;
+     int gotPic = false;
+     int32_t ret = ERR_OK;
+     List<BufferInfo *> &inQueue = getPortQueue(kInputPortIndex);
+@@ -591,8 +591,10 @@ int32_t SoftFFmpegVideo::drainOneOutputBuffer() {
+ 
+     uint32_t bufferWidth = outputBufferWidth();
+     uint32_t bufferHeight = outputBufferHeight();
++#if DEBUG_FRM
+     uint32_t frameWidth = mFrame->width;
+     uint32_t frameHeight = mFrame->height;
++#endif
+ 
+     data[0] = dst;
+     data[1] = dst + bufferWidth * bufferHeight;
+diff --git a/utils/Android.mk b/utils/Android.mk
+index 3d6f609..58323b9 100644
+--- a/utils/Android.mk
++++ b/utils/Android.mk
+@@ -10,7 +10,10 @@ LOCAL_SRC_FILES := \
+ 
+ LOCAL_SHARED_LIBRARIES += \
+ 	liblog            \
+-	libmedia
++	libmediaextractor \
++	libstagefright
++
++LOCAL_STATIC_LIBRARIES += libstagefright_metadatautils
+ 
+ LOCAL_MODULE := libffmpeg_utils
+ 
+diff --git a/utils/codec_utils.cpp b/utils/codec_utils.cpp
+index 2d5c2e4..66ff92a 100644
+--- a/utils/codec_utils.cpp
++++ b/utils/codec_utils.cpp
+@@ -28,10 +28,11 @@ extern "C" {
+ #include <utils/Errors.h>
+ #include <media/stagefright/foundation/ABitReader.h>
+ #include <media/stagefright/foundation/ADebug.h>
++#include <media/stagefright/foundation/avc_utils.h>
+ #include <media/stagefright/MediaDefs.h>
+ #include <media/stagefright/MediaErrors.h>
+ #include <media/stagefright/MetaData.h>
+-#include "include/avc_utils.h"
++#include <media/stagefright/MetaDataUtils.h>
+ 
+ #include "codec_utils.h"
+ 
+@@ -83,7 +84,7 @@ static sp<ABuffer> MakeMPEGVideoESDS(const sp<ABuffer> &csd) {
+ //http://msdn.microsoft.com/en-us/library/dd757808(v=vs.85).aspx
+ 
+ // H.264 bitstream without start codes.
+-sp<MetaData> setAVCFormat(AVCodecContext *avctx)
++status_t setAVCFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("AVC");
+ 
+@@ -99,26 +100,26 @@ sp<MetaData> setAVCFormat(AVCodecContext *avctx)
+          avctx->height = height;
+      }
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_AVC);
+-    meta->setData(kKeyAVCC, kTypeAVCC, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_AVC);
++    meta.setData(kKeyAVCC, kTypeAVCC, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+ // H.264 bitstream with start codes.
+-sp<MetaData> setH264Format(AVCodecContext *avctx)
++status_t setH264Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("H264");
+ 
+     CHECK_NE((int)avctx->extradata[0], 1); //configurationVersion
+ 
+-    sp<ABuffer> buffer = new ABuffer(avctx->extradata_size);
+-    memcpy(buffer->data(), avctx->extradata, avctx->extradata_size);
+-    return MakeAVCCodecSpecificData(buffer);
++    if (!MakeAVCCodecSpecificData(meta, avctx->extradata, avctx->extradata_size))
++      return UNKNOWN_ERROR;
++
++    return OK;
+ }
+ 
+-sp<MetaData> setMPEG4Format(AVCodecContext *avctx)
++status_t setMPEG4Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("MPEG4");
+ 
+@@ -126,30 +127,28 @@ sp<MetaData> setMPEG4Format(AVCodecContext *avctx)
+     memcpy(csd->data(), avctx->extradata, avctx->extradata_size);
+     sp<ABuffer> esds = MakeMPEGVideoESDS(csd);
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setData(kKeyESDS, kTypeESDS, esds->data(), esds->size());
++    meta.setData(kKeyESDS, kTypeESDS, esds->data(), esds->size());
+ 
+     int divxVersion = getDivXVersion(avctx);
+     if (divxVersion >= 0) {
+-        meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_DIVX);
+-        meta->setInt32(kKeyDivXVersion, divxVersion);
++        meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_DIVX);
++        meta.setInt32(kKeyDivXVersion, divxVersion);
+     } else {
+-        meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_MPEG4);
++        meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_MPEG4);
+     }
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setH263Format(AVCodecContext *avctx __unused)
++status_t setH263Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("H263");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_H263);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_H263);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setMPEG2VIDEOFormat(AVCodecContext *avctx)
++status_t setMPEG2VIDEOFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("MPEG%uVIDEO", avctx->codec_id == AV_CODEC_ID_MPEG2VIDEO ? 2 : 1);
+ 
+@@ -157,160 +156,146 @@ sp<MetaData> setMPEG2VIDEOFormat(AVCodecContext *avctx)
+     memcpy(csd->data(), avctx->extradata, avctx->extradata_size);
+     sp<ABuffer> esds = MakeMPEGVideoESDS(csd);
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setData(kKeyESDS, kTypeESDS, esds->data(), esds->size());
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_MPEG2);
++    meta.setData(kKeyESDS, kTypeESDS, esds->data(), esds->size());
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_MPEG2);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setVC1Format(AVCodecContext *avctx)
++status_t setVC1Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("VC1");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VC1);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VC1);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setWMV1Format(AVCodecContext *avctx __unused)
++status_t setWMV1Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("WMV1");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_WMV);
+-    meta->setInt32(kKeyWMVVersion, kTypeWMVVer_7);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_WMV);
++    meta.setInt32(kKeyWMVVersion, kTypeWMVVer_7);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setWMV2Format(AVCodecContext *avctx)
++status_t setWMV2Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("WMV2");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_WMV);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyWMVVersion, kTypeWMVVer_8);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_WMV);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyWMVVersion, kTypeWMVVer_8);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setWMV3Format(AVCodecContext *avctx)
++status_t setWMV3Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("WMV3");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_WMV);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyWMVVersion, kTypeWMVVer_9);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_WMV);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyWMVVersion, kTypeWMVVer_9);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setRV20Format(AVCodecContext *avctx)
++status_t setRV20Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("RV20");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_RV);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyRVVersion, kTypeRVVer_G2); //http://en.wikipedia.org/wiki/RealVide
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_RV);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyRVVersion, kTypeRVVer_G2); //http://en.wikipedia.org/wiki/RealVide
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setRV30Format(AVCodecContext *avctx)
++status_t setRV30Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("RV30");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_RV);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyRVVersion, kTypeRVVer_8); //http://en.wikipedia.org/wiki/RealVide
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_RV);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyRVVersion, kTypeRVVer_8); //http://en.wikipedia.org/wiki/RealVide
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setRV40Format(AVCodecContext *avctx)
++status_t setRV40Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("RV40");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_RV);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyRVVersion, kTypeRVVer_9); //http://en.wikipedia.org/wiki/RealVide
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_RV);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyRVVersion, kTypeRVVer_9); //http://en.wikipedia.org/wiki/RealVide
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setFLV1Format(AVCodecContext *avctx)
++status_t setFLV1Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("FLV1(Sorenson H263)");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_FLV1);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_FLV1);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setHEVCFormat(AVCodecContext *avctx)
++status_t setHEVCFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("HEVC");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_HEVC);
+-    meta->setData(kKeyHVCC, kTypeHVCC, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_HEVC);
++    meta.setData(kKeyHVCC, kTypeHVCC, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setVP8Format(AVCodecContext *avctx __unused)
++status_t setVP8Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("VP8");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VP8);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VP8);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setVP9Format(AVCodecContext *avctx __unused)
++status_t setVP9Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("VP9");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VP9);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_VIDEO_VP9);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+ //audio
+ 
+-sp<MetaData> setMP2Format(AVCodecContext *avctx __unused)
++status_t setMP2Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("MP2");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG_LAYER_II);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG_LAYER_II);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setMP3Format(AVCodecContext *avctx __unused)
++status_t setMP3Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("MP3");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_MPEG);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setVORBISFormat(AVCodecContext *avctx)
++status_t setVORBISFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("VORBIS");
+ 
+@@ -320,143 +305,132 @@ sp<MetaData> setVORBISFormat(AVCodecContext *avctx)
+                 avctx->extradata_size, 30,
+                 header_start, header_len) < 0) {
+         ALOGE("vorbis extradata corrupt.");
+-        return NULL;
++        return UNKNOWN_ERROR;
+     }
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_VORBIS);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_VORBIS);
+     //identification header
+-    meta->setData(kKeyVorbisInfo,  0, header_start[0], header_len[0]);
++    meta.setData(kKeyVorbisInfo,  0, header_start[0], header_len[0]);
+     //setup header
+-    meta->setData(kKeyVorbisBooks, 0, header_start[2], header_len[2]);
++    meta.setData(kKeyVorbisBooks, 0, header_start[2], header_len[2]);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setAC3Format(AVCodecContext *avctx __unused)
++status_t setAC3Format(AVCodecContext *avctx __unused, MetaDataBase &meta)
+ {
+     ALOGV("AC3");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AC3);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AC3);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setAACFormat(AVCodecContext *avctx)
++status_t setAACFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("AAC");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyAACAOT, avctx->profile + 1);
+-    return meta;
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_AAC);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyAACAOT, avctx->profile + 1);
++
++    return OK;
+ }
+ 
+-sp<MetaData> setWMAV1Format(AVCodecContext *avctx)
++status_t setWMAV1Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("WMAV1");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyWMAVersion, kTypeWMA); //FIXME version?
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyWMAVersion, kTypeWMA); //FIXME version?
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setWMAV2Format(AVCodecContext *avctx)
++status_t setWMAV2Format(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("WMAV2");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyWMAVersion, kTypeWMA);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyWMAVersion, kTypeWMA);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setWMAProFormat(AVCodecContext *avctx)
++status_t setWMAProFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("WMAPro");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyWMAVersion, kTypeWMAPro);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyWMAVersion, kTypeWMAPro);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setWMALossLessFormat(AVCodecContext *avctx)
++status_t setWMALossLessFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("WMALOSSLESS");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+-    meta->setInt32(kKeyWMAVersion, kTypeWMALossLess);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_WMA);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setInt32(kKeyWMAVersion, kTypeWMALossLess);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setRAFormat(AVCodecContext *avctx)
++status_t setRAFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("COOK");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_RA);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_RA);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setALACFormat(AVCodecContext *avctx)
++status_t setALACFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("ALAC");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_ALAC);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_ALAC);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setAPEFormat(AVCodecContext *avctx)
++status_t setAPEFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("APE");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_APE);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_APE);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setDTSFormat(AVCodecContext *avctx)
++status_t setDTSFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("DTS");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_DTS);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_DTS);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+-sp<MetaData> setFLACFormat(AVCodecContext *avctx)
++status_t setFLACFormat(AVCodecContext *avctx, MetaDataBase &meta)
+ {
+     ALOGV("FLAC");
+ 
+-    sp<MetaData> meta = new MetaData;
+-    meta->setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_FLAC);
+-    meta->setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
++    meta.setCString(kKeyMIMEType, MEDIA_MIMETYPE_AUDIO_FLAC);
++    meta.setData(kKeyRawCodecSpecificData, 0, avctx->extradata, avctx->extradata_size);
+ 
+     if (avctx->extradata_size < 10) {
+         ALOGE("Invalid extradata in FLAC file! (size=%d)", avctx->extradata_size);
+-        return meta;
++        return UNKNOWN_ERROR;
+     }
+ 
+     ABitReader br(avctx->extradata, avctx->extradata_size);
+@@ -465,12 +439,12 @@ sp<MetaData> setFLACFormat(AVCodecContext *avctx)
+     int32_t minFrameSize = br.getBits(24);
+     int32_t maxFrameSize = br.getBits(24);
+ 
+-    meta->setInt32('mibs', minBlockSize);
+-    meta->setInt32('mabs', maxBlockSize);
+-    meta->setInt32('mifs', minFrameSize);
+-    meta->setInt32('mafs', maxFrameSize);
++    meta.setInt32('mibs', minBlockSize);
++    meta.setInt32('mabs', maxBlockSize);
++    meta.setInt32('mifs', minFrameSize);
++    meta.setInt32('mafs', maxFrameSize);
+ 
+-    return meta;
++    return OK;
+ }
+ 
+ //Convert H.264 NAL format to annex b
+@@ -528,8 +502,8 @@ int getDivXVersion(AVCodecContext *avctx)
+     return -1;
+ }
+ 
+-status_t parseMetadataTags(AVFormatContext *ctx, const sp<MetaData> &meta) {
+-    if (meta == NULL || ctx == NULL) {
++status_t parseMetadataTags(AVFormatContext *ctx, MetaDataBase &meta) {
++    if (ctx == NULL) {
+         return NO_INIT;
+     }
+ 
+@@ -565,7 +539,7 @@ status_t parseMetadataTags(AVFormatContext *ctx, const sp<MetaData> &meta) {
+         AVDictionaryEntry *entry = av_dict_get(dict, kMap[i].from, NULL, 0);
+         if (entry != NULL) {
+             ALOGV("found key %s with value %s", entry->key, entry->value);
+-            meta->setCString(kMap[i].to, entry->value);
++            meta.setCString(kMap[i].to, entry->value);
+         }
+     }
+ 
+@@ -585,8 +559,8 @@ status_t parseMetadataTags(AVFormatContext *ctx, const sp<MetaData> &meta) {
+                     }
+                     if (mime != NULL) {
+                         ALOGV("found albumart in stream %zu with type %s len %d", i, mime, pkt.size);
+-                        meta->setData(kKeyAlbumArt, MetaData::TYPE_NONE, pkt.data, pkt.size);
+-                        meta->setCString(kKeyAlbumArtMIME, mime);
++                        meta.setData(kKeyAlbumArt, MetaData::TYPE_NONE, pkt.data, pkt.size);
++                        meta.setCString(kKeyAlbumArtMIME, mime);
+                     }
+                 }
+             }
+diff --git a/utils/codec_utils.h b/utils/codec_utils.h
+index 3448093..d900e8c 100644
+--- a/utils/codec_utils.h
++++ b/utils/codec_utils.h
+@@ -29,37 +29,37 @@
+ namespace android {
+ 
+ //video
+-sp<MetaData> setAVCFormat(AVCodecContext *avctx);
+-sp<MetaData> setH264Format(AVCodecContext *avctx);
+-sp<MetaData> setMPEG4Format(AVCodecContext *avctx);
+-sp<MetaData> setH263Format(AVCodecContext *avctx);
+-sp<MetaData> setMPEG2VIDEOFormat(AVCodecContext *avctx);
+-sp<MetaData> setVC1Format(AVCodecContext *avctx);
+-sp<MetaData> setWMV1Format(AVCodecContext *avctx);
+-sp<MetaData> setWMV2Format(AVCodecContext *avctx);
+-sp<MetaData> setWMV3Format(AVCodecContext *avctx);
+-sp<MetaData> setRV20Format(AVCodecContext *avctx);
+-sp<MetaData> setRV30Format(AVCodecContext *avctx);
+-sp<MetaData> setRV40Format(AVCodecContext *avctx);
+-sp<MetaData> setFLV1Format(AVCodecContext *avctx);
+-sp<MetaData> setHEVCFormat(AVCodecContext *avctx);
+-sp<MetaData> setVP8Format(AVCodecContext *avctx);
+-sp<MetaData> setVP9Format(AVCodecContext *avctx);
++status_t setAVCFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setH264Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setMPEG4Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setH263Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setMPEG2VIDEOFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setVC1Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMV1Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMV2Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMV3Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setRV20Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setRV30Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setRV40Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setFLV1Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setHEVCFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setVP8Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setVP9Format(AVCodecContext *avctx, MetaDataBase &meta);
+ //audio
+-sp<MetaData> setMP2Format(AVCodecContext *avctx);
+-sp<MetaData> setMP3Format(AVCodecContext *avctx);
+-sp<MetaData> setVORBISFormat(AVCodecContext *avctx);
+-sp<MetaData> setAC3Format(AVCodecContext *avctx);
+-sp<MetaData> setAACFormat(AVCodecContext *avctx);
+-sp<MetaData> setWMAV1Format(AVCodecContext *avctx);
+-sp<MetaData> setWMAV2Format(AVCodecContext *avctx);
+-sp<MetaData> setWMAProFormat(AVCodecContext *avctx);
+-sp<MetaData> setWMALossLessFormat(AVCodecContext *avctx);
+-sp<MetaData> setRAFormat(AVCodecContext *avctx);
+-sp<MetaData> setAPEFormat(AVCodecContext *avctx);
+-sp<MetaData> setDTSFormat(AVCodecContext *avctx);
+-sp<MetaData> setFLACFormat(AVCodecContext *avctx);
+-sp<MetaData> setALACFormat(AVCodecContext *avctx);
++status_t setMP2Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setMP3Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setVORBISFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setAC3Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setAACFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMAV1Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMAV2Format(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMAProFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setWMALossLessFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setRAFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setAPEFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setDTSFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setFLACFormat(AVCodecContext *avctx, MetaDataBase &meta);
++status_t setALACFormat(AVCodecContext *avctx, MetaDataBase &meta);
+ 
+ //Convert H.264 NAL format to annex b
+ status_t convertNal2AnnexB(uint8_t *dst, size_t dst_size,
+@@ -67,7 +67,7 @@ status_t convertNal2AnnexB(uint8_t *dst, size_t dst_size,
+ 
+ int getDivXVersion(AVCodecContext *avctx);
+ 
+-status_t parseMetadataTags(AVFormatContext *ctx, const sp<MetaData> &meta);
++status_t parseMetadataTags(AVFormatContext *ctx, MetaDataBase &meta);
+ 
+ AudioEncoding sampleFormatToEncoding(AVSampleFormat fmt);
+ AVSampleFormat encodingToSampleFormat(AudioEncoding encoding);
+diff --git a/utils/ffmpeg_source.cpp b/utils/ffmpeg_source.cpp
+index e0a4ce5..cc73565 100644
+--- a/utils/ffmpeg_source.cpp
++++ b/utils/ffmpeg_source.cpp
+@@ -20,7 +20,7 @@
+ #include <stdlib.h>
+ #include "ffmpeg_source.h"
+ 
+-#include <media/stagefright/DataSource.h>
++#include <media/DataSource.h>
+ 
+ extern "C" {
+ 
+diff --git a/utils/ffmpeg_utils.cpp b/utils/ffmpeg_utils.cpp
+index ac01b8b..39cd656 100644
+--- a/utils/ffmpeg_utils.cpp
++++ b/utils/ffmpeg_utils.cpp
+@@ -44,10 +44,6 @@ extern "C" {
+ // log
+ static int flags;
+ 
+-// dummy
+-const char program_name[] = "dummy";
+-const int program_birth_year = 2012;
+-
+ // init ffmpeg
+ static pthread_mutex_t s_init_mutex = PTHREAD_MUTEX_INITIALIZER;
+ static int s_ref_count = 0;
+@@ -72,7 +68,6 @@ void nam_av_log_callback(void* ptr, int level, const char* fmt, va_list vl)
+     static int count;
+     static char prev[1024];
+     char line[1024];
+-    static int is_atty;
+ 
+     if (level > av_log_get_level())
+         return;
+-- 
+2.17.1
+
