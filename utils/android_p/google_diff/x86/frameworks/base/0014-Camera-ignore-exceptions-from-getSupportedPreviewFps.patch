@@ -1,7 +1,7 @@
-From 0206e9d7c3ed10490d8d0407b10a9c47a89a8a72 Mon Sep 17 00:00:00 2001
+From acafc770c077c14e8bf5e0dc32ef36886354eec2 Mon Sep 17 00:00:00 2001
 From: Chih-Wei Huang <cwhuang@linux.org.tw>
 Date: Fri, 16 Mar 2018 14:50:39 +0800
-Subject: [PATCH 15/17] Camera: ignore exceptions from
+Subject: [PATCH 14/24] Camera: ignore exceptions from
  getSupportedPreviewFpsRange
 
 ---
@@ -9,7 +9,7 @@ Subject: [PATCH 15/17] Camera: ignore exceptions from
  1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/core/java/android/hardware/camera2/legacy/LegacyMetadataMapper.java b/core/java/android/hardware/camera2/legacy/LegacyMetadataMapper.java
-index 5423ca97eb2..0063360ccd8 100644
+index 5423ca97eb28..0063360ccd83 100644
 --- a/core/java/android/hardware/camera2/legacy/LegacyMetadataMapper.java
 +++ b/core/java/android/hardware/camera2/legacy/LegacyMetadataMapper.java
 @@ -405,7 +405,7 @@ public class LegacyMetadataMapper {

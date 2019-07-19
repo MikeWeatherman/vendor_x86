@@ -1,7 +1,7 @@
 From 612136f8899682e63a19ccbd6812b17ab999d8ea Mon Sep 17 00:00:00 2001
 From: Chih-Wei Huang <cwhuang@linux.org.tw>
 Date: Sun, 18 May 2014 02:20:32 +0800
-Subject: [PATCH 07/17] InputReader: read the pointercal from TSCalibration2
+Subject: [PATCH 07/24] InputReader: read the pointercal from TSCalibration2
 
 Watch the pointercal and reload it on changed.
 ---
@@ -9,7 +9,7 @@ Watch the pointercal and reload it on changed.
  1 file changed, 15 insertions(+)
 
 diff --git a/services/core/java/com/android/server/input/InputManagerService.java b/services/core/java/com/android/server/input/InputManagerService.java
-index 451acf4cfc9..eda85026df4 100644
+index 451acf4cfc9c..eda85026df4b 100644
 --- a/services/core/java/com/android/server/input/InputManagerService.java
 +++ b/services/core/java/com/android/server/input/InputManagerService.java
 @@ -70,6 +70,7 @@ import android.hardware.input.TouchCalibration;

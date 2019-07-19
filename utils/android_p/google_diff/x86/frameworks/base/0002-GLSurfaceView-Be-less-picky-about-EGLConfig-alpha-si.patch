@@ -1,7 +1,7 @@
 From ea00f73b1592bd888f8e81358bc6903200527a85 Mon Sep 17 00:00:00 2001
 From: Andy Ross <andy.ross@windriver.com>
 Date: Tue, 15 Jan 2013 15:05:38 -0800
-Subject: [PATCH 02/17] GLSurfaceView: Be less picky about EGLConfig alpha
+Subject: [PATCH 02/24] GLSurfaceView: Be less picky about EGLConfig alpha
  sizes
 
 EGLChooseConfig returns a "best match" set of visuals meeting or
@@ -25,7 +25,7 @@ Signed-off-by: Andy Ross <andy.ross@windriver.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/opengl/java/android/opengl/GLSurfaceView.java b/opengl/java/android/opengl/GLSurfaceView.java
-index 0f0a7e9d131..d9bdf429b4b 100644
+index 0f0a7e9d1314..d9bdf429b4b8 100644
 --- a/opengl/java/android/opengl/GLSurfaceView.java
 +++ b/opengl/java/android/opengl/GLSurfaceView.java
 @@ -969,7 +969,7 @@ public class GLSurfaceView extends SurfaceView implements SurfaceHolder.Callback

@@ -1,7 +1,7 @@
-From 795160a9f8578d8d2ec7d8d244342bd35ba0e440 Mon Sep 17 00:00:00 2001
+From 2888b5bbc0d234482d19ea2c4a5be332cc383709 Mon Sep 17 00:00:00 2001
 From: Chih-Wei Huang <cwhuang@linux.org.tw>
 Date: Tue, 21 Nov 2017 16:36:30 +0800
-Subject: [PATCH 14/17] input: simulate long press properly
+Subject: [PATCH 13/24] input: simulate long press properly
 
 The original implementation of long press sends two ACTION_DOWN events
 which would be interpreted as a double tap. For example, sending
@@ -20,7 +20,7 @@ Just simulate the long press by delaying ACTION_UP one second.
  1 file changed, 6 insertions(+), 3 deletions(-)
 
 diff --git a/cmds/input/src/com/android/commands/input/Input.java b/cmds/input/src/com/android/commands/input/Input.java
-index d3ec3207629..96b230ad473 100644
+index d3ec32076292..96b230ad4736 100644
 --- a/cmds/input/src/com/android/commands/input/Input.java
 +++ b/cmds/input/src/com/android/commands/input/Input.java
 @@ -198,9 +198,12 @@ public class Input {

@@ -1,7 +1,7 @@
-From 587b77c02506aed4796d323a3c3fc416d6cd8611 Mon Sep 17 00:00:00 2001
+From 2b8135a94217dbd771facad59a1a40f36b1ea8ba Mon Sep 17 00:00:00 2001
 From: Mauro Rossi <issor.oruam@gmail.com>
 Date: Sun, 3 Mar 2019 16:28:41 +0100
-Subject: [PATCH 01/23] android_view_ThreadedRenderer: prevent Null Pointer
+Subject: [PATCH 23/24] android_view_ThreadedRenderer: prevent Null Pointer
  Exception in createBitmap
 
 To avoid Playstore crashes with nouveau and Hardware Bitmap,
@@ -25,11 +25,6 @@ Cause: null pointer dereference
 backtrace:
     #00 pc 000fd7c8  /system/lib/libandroid_runtime.so (android::bitmap::createBitmap(_JNIEnv*, android::Bitmap*, int, _jbyteArray*, _jobject*, int)+104)
     #01 pc 000d08ca  /system/lib/libandroid_runtime.so (android::android_view_ThreadedRenderer_createHardwareBitmapFromRenderNode(_JNIEnv*, _jobject*, long long, int, int)+1002)
-
-Conflicts:
-	core/jni/android_view_ThreadedRenderer.cpp
-
-Change-Id: I242241cff7cbf893d22ddd5a62b88a9ac18f7044
 ---
  core/jni/android_view_ThreadedRenderer.cpp | 4 ++++
  1 file changed, 4 insertions(+)

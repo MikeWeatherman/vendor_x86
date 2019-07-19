@@ -1,14 +1,14 @@
 From 874efb3821af2604ec15364c12db787e21af53b8 Mon Sep 17 00:00:00 2001
 From: Chih-Wei Huang <cwhuang@linux.org.tw>
 Date: Fri, 13 Sep 2013 16:15:12 +0800
-Subject: [PATCH 05/17] MediaFile: support more media types
+Subject: [PATCH 05/24] MediaFile: support more media types
 
 ---
  media/java/android/media/MediaFile.java | 44 ++++++++++++++++++-------
  1 file changed, 32 insertions(+), 12 deletions(-)
 
 diff --git a/media/java/android/media/MediaFile.java b/media/java/android/media/MediaFile.java
-index 35937de287a..ee5804b8132 100644
+index 35937de287a3..ee5804b8132e 100644
 --- a/media/java/android/media/MediaFile.java
 +++ b/media/java/android/media/MediaFile.java
 @@ -43,13 +43,19 @@ public class MediaFile {

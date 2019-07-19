@@ -1,7 +1,7 @@
-From 486fc00d724cfa202ab86dab8a29377b8b04fa71 Mon Sep 17 00:00:00 2001
+From 6d1c318d9bf7da0a0513469edd2a521c0d8e9ee0 Mon Sep 17 00:00:00 2001
 From: Mauro Rossi <issor.oruam@gmail.com>
 Date: Fri, 10 Aug 2018 01:12:22 +0200
-Subject: [PATCH 39/40] Modify color inversion matrix to swap Red and Blue
+Subject: [PATCH 21/24] Modify color inversion matrix to swap Red and Blue
  colors
 
 Instead of color inversion it will produce Red and Blue colors swap,
