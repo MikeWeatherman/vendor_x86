@@ -300,9 +300,15 @@ buildProprietary() {
 	echo "Setting up Proprietary environment for: $1"
 	lunch $bliss_variant
 	echo "Building proprietary tools, part 1... This won't take too long..."
-	mka update_engine_applier
-	echo "Building proprietary tools... part 2... This may take a while..."
-	mka proprietary
+	cd vendor/google/chromeos-x86
+	./extract-files.sh
+	cd ..
+	cd ..
+	cd ..
+	
+	# mka update_engine_applier
+	# echo "Building proprietary tools... part 2... This may take a while..."
+	# mka proprietary
 }
 
 buildVariant() {
