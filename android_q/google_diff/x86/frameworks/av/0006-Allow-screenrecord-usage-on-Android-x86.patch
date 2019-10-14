@@ -1,7 +1,7 @@
-From 25d8c9ee5c56e4b70e0d1246e2e41dce650e34a1 Mon Sep 17 00:00:00 2001
+From ae556e35b8327cd47becc785e624664381f7b770 Mon Sep 17 00:00:00 2001
 From: Paulo Sergio Travaglia <pstglia@gmail.com>
 Date: Sun, 17 Jan 2016 15:23:06 -0200
-Subject: [PATCH 06/10] Allow screenrecord usage on Android-x86
+Subject: [PATCH] Allow screenrecord usage on Android-x86
 
 Selects a supported color format for screenrecord (
 OMX_COLOR_FormatYUV420Planar instead of OMX_COLOR_FormatAndroidOpaque)
@@ -13,15 +13,15 @@ in order to make screenrecord work on Android-x86.
  2 files changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/cmds/screenrecord/screenrecord.cpp b/cmds/screenrecord/screenrecord.cpp
-index 7aa655ff37..5ce5282323 100644
+index c7d907827e..6344796c0d 100644
 --- a/cmds/screenrecord/screenrecord.cpp
 +++ b/cmds/screenrecord/screenrecord.cpp
-@@ -187,7 +187,7 @@ static status_t prepareEncoder(float displayFps, sp<MediaCodec>* pCodec,
+@@ -189,7 +189,7 @@ static status_t prepareEncoder(float displayFps, sp<MediaCodec>* pCodec,
      format->setInt32(KEY_WIDTH, gVideoWidth);
      format->setInt32(KEY_HEIGHT, gVideoHeight);
-     format->setString(KEY_MIME, kMimeTypeAvc);
+     format->setString(KEY_MIME, kMimeTypeString);
 -    format->setInt32(KEY_COLOR_FORMAT, OMX_COLOR_FormatAndroidOpaque);
-+    format->setInt32(KEY_COLOR_FORMAT, OMX_COLOR_FormatYUV420Planar);
++    format->setInt32(KEY_COLOR_FORMAT, OMX_COLOR_FormatYUV420Planar); 
      format->setInt32(KEY_BIT_RATE, gBitRate);
      format->setFloat(KEY_FRAME_RATE, displayFps);
      format->setInt32(KEY_I_FRAME_INTERVAL, 10);
@@ -41,5 +41,5 @@ index 11e563cdc2..67833d5263 100644
  
              return OMX_ErrorNone;
 -- 
-2.21.0
+2.17.1
 
