@@ -315,7 +315,8 @@ buildVariant() {
 	echo "Starting lunch command for: $1"
 	lunch $1
 	echo "Starting up the build... This may take a while..."
-	mka iso_img
+	make -j$((`nproc`+1)) iso_img
+	# nproc | xargs -I % make -j% iso_img
 }
 
 if  [ $proprietary == "y" ];then
