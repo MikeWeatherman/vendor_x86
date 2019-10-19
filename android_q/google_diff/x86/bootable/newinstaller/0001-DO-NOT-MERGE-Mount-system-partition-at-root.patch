@@ -1,32 +1,32 @@
-From 2621f527c8c8c02867b3272855faadb3fc466194 Mon Sep 17 00:00:00 2001
+From af31a6bb1f2b853689d328285479a4101cf7fb60 Mon Sep 17 00:00:00 2001
 From: Michael Goffioul <michael.goffioul@lincor.com>
 Date: Sun, 13 Oct 2019 12:55:12 -0400
 Subject: [PATCH] DO NOT MERGE: Mount system partition at root.
 
 ---
  Android.mk                |  2 +-
- initrd/init               | 47 +++++++++++++++------------------------
+ initrd/init               | 48 ++++++++++++++++-----------------------
  install/scripts/1-install |  8 +++----
- 3 files changed, 23 insertions(+), 34 deletions(-)
+ 3 files changed, 24 insertions(+), 34 deletions(-)
 
 diff --git a/Android.mk b/Android.mk
-index 4a5bfb5..bec15a7 100644
+index b0bcf33..65db321 100644
 --- a/Android.mk
 +++ b/Android.mk
-@@ -82,7 +82,7 @@ $(boot_dir): $(shell find $(LOCAL_PATH)/boot -type f | sort -r) $(isolinux_files
+@@ -78,7 +78,7 @@ $(boot_dir): $(shell find $(LOCAL_PATH)/boot -type f | sort -r) $(isolinux_files
  	mkdosfs -n EFI $$img; mmd -i $$img ::boot; \
  	mcopy -si $$img $@/efi ::; mdel -i $$img ::efi/boot/*.cfg
  
--BUILT_IMG := $(addprefix $(PRODUCT_OUT)/,ramdisk.img initrd.img install.img Androidx86-Installv26.0003.exe) $(systemimg)
-+BUILT_IMG := $(addprefix $(PRODUCT_OUT)/,initrd.img install.img Androidx86-Installv26.0003.exe) $(systemimg) 
+-BUILT_IMG := $(addprefix $(PRODUCT_OUT)/,ramdisk.img initrd.img install.img) $(systemimg)
++BUILT_IMG := $(addprefix $(PRODUCT_OUT)/,initrd.img install.img) $(systemimg)
  BUILT_IMG += $(if $(TARGET_PREBUILT_KERNEL),$(TARGET_PREBUILT_KERNEL),$(PRODUCT_OUT)/kernel)
  
  GENISOIMG := $(if $(shell which xorriso 2> /dev/null),xorriso -as mkisofs,genisoimage)
 diff --git a/initrd/init b/initrd/init
-index 54d7f9d..bdfb830 100755
+index 7b20c9d..91f07f5 100755
 --- a/initrd/init
 +++ b/initrd/init
-@@ -102,32 +102,23 @@ check_root()
+@@ -98,32 +98,23 @@ check_root()
  		mount -o loop /iso/$iso /mnt/iso
  		SRC=iso
  	fi
@@ -65,7 +65,7 @@ index 54d7f9d..bdfb830 100755
  	echo " found at $1"
  	rm /sbin/mke2fs
  	hash -r
-@@ -147,14 +138,13 @@ debug_shell()
+@@ -143,14 +134,13 @@ debug_shell()
  		USER="($1)" system/bin/sh -l 2>&1
  	else
  		echo Running busybox ash...
@@ -81,7 +81,7 @@ index 54d7f9d..bdfb830 100755
  
  for c in `cat /proc/cmdline`; do
  	case $c in
-@@ -166,8 +156,7 @@ for c in `cat /proc/cmdline`; do
+@@ -162,8 +152,7 @@ for c in `cat /proc/cmdline`; do
  	esac
  done
  
@@ -89,18 +89,24 @@ index 54d7f9d..bdfb830 100755
 -cd /android
 +cd /
  while :; do
- 	for device in ${ROOT:-/dev/[hmnsv][dmrv][0-9a-z]*} ${ROOT:-/dev/xvd[0-9a-z]*} ${ROOT:-/dev/nvme0n[0-9]p[0-9a-z]*}; do
+ 	for device in ${ROOT:-/dev/[hmnsv][dmrv][0-9a-z]*}; do
  		check_root $device && break 2
-@@ -183,18 +172,15 @@ ln -s ../system/lib/firmware ../system/lib/modules /lib
- mkdir -p /lib/modules
- ln -s /system/lib/modules /lib/modules/`uname -r`
+@@ -172,23 +161,21 @@ while :; do
+ 	sleep 1
+ 	echo -n .
+ done
++cd /android
+ 
+ ln -s mnt/$SRC /src
+ ln -s android/system /
+ ln -s ../system/lib/firmware ../system/lib/modules /lib
  
 -if [ -n "$INSTALL" ]; then
 -	zcat /src/install.img | ( cd /; cpio -iud > /dev/null )
-+mkdir /apex 
-+if [ -d system/apex/com.android.runtime.debug ]; then 
-+	ln -s ../android/system/apex/com.android.runtime.debug /apex/com.android.runtime 
-+else 
++mkdir /apex
++if [ -d system/apex/com.android.runtime.debug ]; then
++	ln -s ../android/system/apex/com.android.runtime.debug /apex/com.android.runtime
++else
 +	ln -s ../android/system/apex/com.android.runtime.release /apex/com.android.runtime
  fi
  
@@ -112,12 +118,12 @@ index 54d7f9d..bdfb830 100755
 -	rmdir /sbin
 -	ln -s android/bin android/lib android/sbin /
 -	hash -r
-+if [ -n "$INSTALL" ]; then 
-+	zcat /src/install.img | ( cd /; cpio -iud > /dev/null ) 
++if [ -n "$INSTALL" ]; then
++	zcat /src/install.img | ( cd /; cpio -iud > /dev/null )
  fi
  
  # load scripts
-@@ -244,6 +230,9 @@ fi
+@@ -237,6 +224,9 @@ fi
  # since it conflicts with Android's init
  echo > /proc/sys/kernel/hotplug
  
@@ -128,7 +134,7 @@ index 54d7f9d..bdfb830 100755
  
  exec ${SWITCH:-switch_root} /android /init
 diff --git a/install/scripts/1-install b/install/scripts/1-install
-index fd2362f..58abe24 100644
+index 95dcc78..f762403 100644
 --- a/install/scripts/1-install
 +++ b/install/scripts/1-install
 @@ -213,7 +213,7 @@ format_fs()
@@ -149,7 +155,7 @@ index fd2362f..58abe24 100644
  		}' | progress_bar "Formatting" "Formatting partition $1..."
  		convert_fs $1
  	elif blkid /dev/$1 | grep -q ext[23]; then
-@@ -335,7 +335,7 @@ try_upgrade()
+@@ -334,7 +334,7 @@ try_upgrade()
  	[ -d $1 ] && return
  
  	for d in hd/*; do
@@ -158,7 +164,7 @@ index fd2362f..58abe24 100644
  	done | sort -r > $menufile
  
  	count=`wc -l < $menufile`
-@@ -532,7 +532,7 @@ install_to()
+@@ -507,7 +507,7 @@ install_to()
  	else
  		sysimg="mnt/$SRC/system.*"
  	fi
@@ -168,5 +174,5 @@ index fd2362f..58abe24 100644
  	for s in `du -sk $files | awk '{print $1}'`; do
  		size=$(($size+$s))
 -- 
-2.17.1
+2.21.0
 
