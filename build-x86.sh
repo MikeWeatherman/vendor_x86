@@ -5,8 +5,8 @@ rompath=$(pwd)
 mkdir -p release/$rom_fp/
 set -e
 
-localManifestBranch="p9.0"
-rom="bliss"
+localManifestBranch="q-x86"
+rom="Android-PC"
 bliss_variant=""
 bliss_variant_name=""
 bliss_release="n"
@@ -52,8 +52,8 @@ do
       echo "Cleaning build and device tree selected."
       ;;
     -v | --version)
-      echo "Version: Bliss x86 Builder 0.1"
-      echo "Updated: 9/20/2018"
+      echo "Version: Bliss x86 Builder 2.0"
+      echo "Updated: 10/19/2019"
       ;;
     -s | --sync)
       sync="y";
@@ -131,7 +131,7 @@ fi
 
 if [ "$2" = "" ];then
    romBranch="p9.0"
-   echo "Using branch $romBranch for repo syncing Bliss."
+   echo "Using branch $romBranch for repo syncing."
    
 elif [ "$2" = "foss" ];then
    export USE_OPENGAPPS=false
@@ -139,21 +139,9 @@ elif [ "$2" = "foss" ];then
    export USE_GO=false
    export USE_GMS=false
    echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"      ___           ___                   ___           ___      "${CL_CYN}
-   echo -e ${CL_CYN}"     /\  \         /\__\      ___        /\  \         /\  \     "${CL_CYN}
-   echo -e ${CL_CYN}"    /::\  \       /:/  /     /\  \      /::\  \       /::\  \    "${CL_CYN}
-   echo -e ${CL_CYN}"   /:/\:\  \     /:/  /      \:\  \    /:/\ \  \     /:/\ \  \   "${CL_CYN}
-   echo -e ${CL_CYN}"  /::\~\:\__\   /:/  /       /::\__\  _\:\~\ \  \   _\:\~\ \  \  "${CL_CYN}
-   echo -e ${CL_CYN}" /:/\:\ \:\__\ /:/__/     __/:/\/__/ /\ \:\ \ \__\ /\ \:\ \ \__\ "${CL_CYN}
-   echo -e ${CL_CYN}" \:\~\:\/:/  / \:\  \    /\/:/  /    \:\ \:\ \/__/ \:\ \:\ \/__/ "${CL_CYN}
-   echo -e ${CL_CYN}"  \:\ \::/  /   \:\  \   \::/__/      \:\ \:\__\    \:\ \:\__\   "${CL_CYN}
-   echo -e ${CL_CYN}"   \:\/:/  /     \:\  \   \:\__\       \:\/:/  /     \:\/:/  /   "${CL_CYN}
-   echo -e ${CL_CYN}"    \::/__/       \:\__\   \/__/        \::/  /       \::/  /    "${CL_CYN}
-   echo -e ${CL_CYN}"     ~~            \/__/                 \/__/         \/__/     "${CL_CYN}
-   echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"======-Bliss-x86 Building w/ microG & F-Droid-====="${CL_RST}
-   echo -e ${CL_CYN}"         Have A Truly Blissful Experience"          ${CL_RST}
-   echo -e ${CL_CYN}"==================================================="${CL_RST}
+   echo -e ${CL_CYN}"======-Android-x86 Building w/ microG & F-Droid-====="${CL_RST}
+   echo -e ${CL_CYN}"       Thank you for contributing to our project"     ${CL_RST}
+   echo -e ${CL_CYN}"====================================================="${CL_RST}
    echo -e ""
    
 elif [ "$2" = "gapps" ];then
@@ -162,21 +150,9 @@ elif [ "$2" = "gapps" ];then
    export USE_OPENGAPPS=true
    export USE_GMS=false
    echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"      ___           ___                   ___           ___      "${CL_CYN}
-   echo -e ${CL_CYN}"     /\  \         /\__\      ___        /\  \         /\  \     "${CL_CYN}
-   echo -e ${CL_CYN}"    /::\  \       /:/  /     /\  \      /::\  \       /::\  \    "${CL_CYN}
-   echo -e ${CL_CYN}"   /:/\:\  \     /:/  /      \:\  \    /:/\ \  \     /:/\ \  \   "${CL_CYN}
-   echo -e ${CL_CYN}"  /::\~\:\__\   /:/  /       /::\__\  _\:\~\ \  \   _\:\~\ \  \  "${CL_CYN}
-   echo -e ${CL_CYN}" /:/\:\ \:\__\ /:/__/     __/:/\/__/ /\ \:\ \ \__\ /\ \:\ \ \__\ "${CL_CYN}
-   echo -e ${CL_CYN}" \:\~\:\/:/  / \:\  \    /\/:/  /    \:\ \:\ \/__/ \:\ \:\ \/__/ "${CL_CYN}
-   echo -e ${CL_CYN}"  \:\ \::/  /   \:\  \   \::/__/      \:\ \:\__\    \:\ \:\__\   "${CL_CYN}
-   echo -e ${CL_CYN}"   \:\/:/  /     \:\  \   \:\__\       \:\/:/  /     \:\/:/  /   "${CL_CYN}
-   echo -e ${CL_CYN}"    \::/__/       \:\__\   \/__/        \::/  /       \::/  /    "${CL_CYN}
-   echo -e ${CL_CYN}"     ~~            \/__/                 \/__/         \/__/     "${CL_CYN}
-   echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"=========-Bliss-x86 Building w/ OpenGapps-========="${CL_RST}
-   echo -e ${CL_CYN}"         Have A Truly Blissful Experience"          ${CL_RST}
-   echo -e ${CL_CYN}"==================================================="${CL_RST}
+   echo -e ${CL_CYN}"=========-Android-x86 Building w/ OpenGapps-========="${CL_RST}
+   echo -e ${CL_CYN}"       Thank you for contributing to our project"     ${CL_RST}
+   echo -e ${CL_CYN}"====================================================="${CL_RST}
    echo -e ""
    
 elif [ "$2" = "go" ];then
@@ -185,21 +161,9 @@ elif [ "$2" = "go" ];then
    export USE_OPENGAPPS=false
    export USE_GMS=false
    echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"      ___           ___                   ___           ___      "${CL_CYN}
-   echo -e ${CL_CYN}"     /\  \         /\__\      ___        /\  \         /\  \     "${CL_CYN}
-   echo -e ${CL_CYN}"    /::\  \       /:/  /     /\  \      /::\  \       /::\  \    "${CL_CYN}
-   echo -e ${CL_CYN}"   /:/\:\  \     /:/  /      \:\  \    /:/\ \  \     /:/\ \  \   "${CL_CYN}
-   echo -e ${CL_CYN}"  /::\~\:\__\   /:/  /       /::\__\  _\:\~\ \  \   _\:\~\ \  \  "${CL_CYN}
-   echo -e ${CL_CYN}" /:/\:\ \:\__\ /:/__/     __/:/\/__/ /\ \:\ \ \__\ /\ \:\ \ \__\ "${CL_CYN}
-   echo -e ${CL_CYN}" \:\~\:\/:/  / \:\  \    /\/:/  /    \:\ \:\ \/__/ \:\ \:\ \/__/ "${CL_CYN}
-   echo -e ${CL_CYN}"  \:\ \::/  /   \:\  \   \::/__/      \:\ \:\__\    \:\ \:\__\   "${CL_CYN}
-   echo -e ${CL_CYN}"   \:\/:/  /     \:\  \   \:\__\       \:\/:/  /     \:\/:/  /   "${CL_CYN}
-   echo -e ${CL_CYN}"    \::/__/       \:\__\   \/__/        \::/  /       \::/  /    "${CL_CYN}
-   echo -e ${CL_CYN}"     ~~            \/__/                 \/__/         \/__/     "${CL_CYN}
-   echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"=============-Bliss-x86 Building w/ Go-============"${CL_RST}
-   echo -e ${CL_CYN}"         Have A Truly Blissful Experience"          ${CL_RST}
-   echo -e ${CL_CYN}"==================================================="${CL_RST}
+   echo -e ${CL_CYN}"=============-Android-x86 Building w/ Go-============"${CL_RST}
+   echo -e ${CL_CYN}"       Thank you for contributing to our project"     ${CL_RST}
+   echo -e ${CL_CYN}"====================================================="${CL_RST}
    echo -e ""
    
    
@@ -209,21 +173,9 @@ elif [ "$2" = "none" ];then
    export USE_OPENGAPPS=false
    export USE_GMS=false
    echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"      ___           ___                   ___           ___      "${CL_CYN}
-   echo -e ${CL_CYN}"     /\  \         /\__\      ___        /\  \         /\  \     "${CL_CYN}
-   echo -e ${CL_CYN}"    /::\  \       /:/  /     /\  \      /::\  \       /::\  \    "${CL_CYN}
-   echo -e ${CL_CYN}"   /:/\:\  \     /:/  /      \:\  \    /:/\ \  \     /:/\ \  \   "${CL_CYN}
-   echo -e ${CL_CYN}"  /::\~\:\__\   /:/  /       /::\__\  _\:\~\ \  \   _\:\~\ \  \  "${CL_CYN}
-   echo -e ${CL_CYN}" /:/\:\ \:\__\ /:/__/     __/:/\/__/ /\ \:\ \ \__\ /\ \:\ \ \__\ "${CL_CYN}
-   echo -e ${CL_CYN}" \:\~\:\/:/  / \:\  \    /\/:/  /    \:\ \:\ \/__/ \:\ \:\ \/__/ "${CL_CYN}
-   echo -e ${CL_CYN}"  \:\ \::/  /   \:\  \   \::/__/      \:\ \:\__\    \:\ \:\__\   "${CL_CYN}
-   echo -e ${CL_CYN}"   \:\/:/  /     \:\  \   \:\__\       \:\/:/  /     \:\/:/  /   "${CL_CYN}
-   echo -e ${CL_CYN}"    \::/__/       \:\__\   \/__/        \::/  /       \::/  /    "${CL_CYN}
-   echo -e ${CL_CYN}"     ~~            \/__/                 \/__/         \/__/     "${CL_CYN}
-   echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"=============-Bliss-x86 Building Clean-============"${CL_RST}
-   echo -e ${CL_CYN}"         Have A Truly Blissful Experience"          ${CL_RST}
-   echo -e ${CL_CYN}"==================================================="${CL_RST}
+   echo -e ${CL_CYN}"=============-Android-x86 Building Clean-============"${CL_RST}
+   echo -e ${CL_CYN}"       Thank you for contributing to our project"     ${CL_RST}
+   echo -e ${CL_CYN}"====================================================="${CL_RST}
    echo -e ""
    
 elif [ "$2" = "gms" ];then
@@ -232,26 +184,14 @@ elif [ "$2" = "gms" ];then
    export USE_GO=false
    export USE_OPENGAPPS=false
    echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"      ___           ___                   ___           ___      "${CL_CYN}
-   echo -e ${CL_CYN}"     /\  \         /\__\      ___        /\  \         /\  \     "${CL_CYN}
-   echo -e ${CL_CYN}"    /::\  \       /:/  /     /\  \      /::\  \       /::\  \    "${CL_CYN}
-   echo -e ${CL_CYN}"   /:/\:\  \     /:/  /      \:\  \    /:/\ \  \     /:/\ \  \   "${CL_CYN}
-   echo -e ${CL_CYN}"  /::\~\:\__\   /:/  /       /::\__\  _\:\~\ \  \   _\:\~\ \  \  "${CL_CYN}
-   echo -e ${CL_CYN}" /:/\:\ \:\__\ /:/__/     __/:/\/__/ /\ \:\ \ \__\ /\ \:\ \ \__\ "${CL_CYN}
-   echo -e ${CL_CYN}" \:\~\:\/:/  / \:\  \    /\/:/  /    \:\ \:\ \/__/ \:\ \:\ \/__/ "${CL_CYN}
-   echo -e ${CL_CYN}"  \:\ \::/  /   \:\  \   \::/__/      \:\ \:\__\    \:\ \:\__\   "${CL_CYN}
-   echo -e ${CL_CYN}"   \:\/:/  /     \:\  \   \:\__\       \:\/:/  /     \:\/:/  /   "${CL_CYN}
-   echo -e ${CL_CYN}"    \::/__/       \:\__\   \/__/        \::/  /       \::/  /    "${CL_CYN}
-   echo -e ${CL_CYN}"     ~~            \/__/                 \/__/         \/__/     "${CL_CYN}
-   echo -e ${CL_CYN}""${CL_CYN}
-   echo -e ${CL_CYN}"===========-Bliss-x86 Building with GMS-==========="${CL_RST}
-   echo -e ${CL_CYN}"         Have A Truly Blissful Experience"          ${CL_RST}
-   echo -e ${CL_CYN}"==================================================="${CL_RST}
+   echo -e ${CL_CYN}"===========-Android-x86 Building with GMS-==========="${CL_RST}
+   echo -e ${CL_CYN}"       Thank you for contributing to our project"     ${CL_RST}
+   echo -e ${CL_CYN}"====================================================="${CL_RST}
    echo -e ""
    
 else
    romBranch="$2"
-   echo "Using branch $romBranch for repo syning Bliss."
+   echo "Using branch $romBranch for repo syning."
    
 fi
 
@@ -315,7 +255,7 @@ buildVariant() {
 	echo "Starting lunch command for: $1"
 	lunch $1
 	echo "Starting up the build... This may take a while..."
-	make -j$((`nproc`+1)) iso_img
+	make -j$((`nproc`-1)) iso_img
 	# nproc | xargs -I % make -j% iso_img
 }
 
