@@ -1,7 +1,7 @@
-From af31a6bb1f2b853689d328285479a4101cf7fb60 Mon Sep 17 00:00:00 2001
+From 1674522d8125794969c71a29dad2ebcdaeffe658 Mon Sep 17 00:00:00 2001
 From: Michael Goffioul <michael.goffioul@lincor.com>
 Date: Sun, 13 Oct 2019 12:55:12 -0400
-Subject: [PATCH] DO NOT MERGE: Mount system partition at root.
+Subject: [PATCH 1/2] DO NOT MERGE: Mount system partition at root.
 
 ---
  Android.mk                |  2 +-
@@ -174,5 +174,5 @@ index 95dcc78..f762403 100644
  	for s in `du -sk $files | awk '{print $1}'`; do
  		size=$(($size+$s))
 -- 
-2.21.0
+2.17.1
 
