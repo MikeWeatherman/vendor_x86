@@ -1,7 +1,7 @@
 From 1674522d8125794969c71a29dad2ebcdaeffe658 Mon Sep 17 00:00:00 2001
 From: Michael Goffioul <michael.goffioul@lincor.com>
 Date: Sun, 13 Oct 2019 12:55:12 -0400
-Subject: [PATCH 1/2] DO NOT MERGE: Mount system partition at root.
+Subject: [PATCH 1/6] DO NOT MERGE: Mount system partition at root.
 
 ---
  Android.mk                |  2 +-

@@ -1,7 +1,7 @@
-From f52838d7fc2fe70aa6a85e2745a66e8d6659c703 Mon Sep 17 00:00:00 2001
+From ed3804e7e442c887f75e43fe238e860da6ff878c Mon Sep 17 00:00:00 2001
 From: Jon West <electrikjesus@gmail.com>
 Date: Tue, 22 Oct 2019 19:21:11 -0400
-Subject: [PATCH 2/2] Add date to filename
+Subject: [PATCH 2/6] Add date to filename
 
 ---
  Android.mk | 2 +-
