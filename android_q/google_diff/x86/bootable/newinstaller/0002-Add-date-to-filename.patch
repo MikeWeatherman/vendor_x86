@@ -1,4 +1,4 @@
-From c3635844c9f4bad9ed55b02735057c6843d573b2 Mon Sep 17 00:00:00 2001
+From f52838d7fc2fe70aa6a85e2745a66e8d6659c703 Mon Sep 17 00:00:00 2001
 From: Jon West <electrikjesus@gmail.com>
 Date: Tue, 22 Oct 2019 19:21:11 -0400
 Subject: [PATCH 2/2] Add date to filename
@@ -8,7 +8,7 @@ Subject: [PATCH 2/2] Add date to filename
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/Android.mk b/Android.mk
-index 65db321..5fcb625 100644
+index 65db321..2b27303 100644
 --- a/Android.mk
 +++ b/Android.mk
 @@ -82,7 +82,7 @@ BUILT_IMG := $(addprefix $(PRODUCT_OUT)/,initrd.img install.img) $(systemimg)
@@ -16,7 +16,7 @@ index 65db321..5fcb625 100644
  
  GENISOIMG := $(if $(shell which xorriso 2> /dev/null),xorriso -as mkisofs,genisoimage)
 -ISO_IMAGE := $(PRODUCT_OUT)/$(TARGET_PRODUCT).iso
-+ISO_IMAGE := $(PRODUCT_OUT)/$(TARGET_PRODUCT)-$(shell date +%Y%m%d).iso
++ISO_IMAGE := $(PRODUCT_OUT)/$(TARGET_PRODUCT)-$(shell date +%Y%m%d%H%M).iso
  $(ISO_IMAGE): $(boot_dir) $(BUILT_IMG)
  	@echo ----- Making iso image ------
  	$(hide) sed -i "s|\(Installation CD\)\(.*\)|\1 $(VER)|; s|CMDLINE|$(BOARD_KERNEL_CMDLINE)|" $</isolinux/isolinux.cfg
