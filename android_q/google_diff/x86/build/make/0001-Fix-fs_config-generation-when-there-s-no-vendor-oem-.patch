@@ -1,7 +1,7 @@
-From cec2baf6cbe4aa95a8a0f478b3741db9435b1327 Mon Sep 17 00:00:00 2001
+From 9e3b3a18c100513fe3468cae5eca39a44f7d3da8 Mon Sep 17 00:00:00 2001
 From: Michael Goffioul <michael.goffioul@lincor.com>
 Date: Fri, 4 Oct 2019 20:08:41 -0400
-Subject: [PATCH] Fix fs_config generation when there's no vendor/oem
+Subject: [PATCH 01/17] Fix fs_config generation when there's no vendor/oem
  partitions
 
 ---
@@ -10,7 +10,7 @@ Subject: [PATCH] Fix fs_config generation when there's no vendor/oem
  2 files changed, 7 insertions(+), 10 deletions(-)
 
 diff --git a/tools/fs_config/Android.mk b/tools/fs_config/Android.mk
-index 96db0f39f..af0da46b2 100644
+index 96db0f39fb..af0da46b29 100644
 --- a/tools/fs_config/Android.mk
 +++ b/tools/fs_config/Android.mk
 @@ -99,7 +99,7 @@ $(LOCAL_BUILT_MODULE): $(LOCAL_PATH)/fs_config_generator.py $(TARGET_FS_CONFIG_G
@@ -32,7 +32,7 @@ index 96db0f39f..af0da46b2 100644
  	   --out_file $@ \
  	   $(or $(PRIVATE_TARGET_FS_CONFIG_GEN),/dev/null)
 diff --git a/tools/fs_config/fs_config_generator.py b/tools/fs_config/fs_config_generator.py
-index dccff928f..25bdfa84c 100755
+index dccff928f9..25bdfa84c6 100755
 --- a/tools/fs_config/fs_config_generator.py
 +++ b/tools/fs_config/fs_config_generator.py
 @@ -1004,10 +1004,6 @@ class FSConfigGen(BaseGenerator):
@@ -63,5 +63,5 @@ index dccff928f..25bdfa84c 100755
          else:
              if path.startswith(
 -- 
-2.21.0
+2.17.1
 
