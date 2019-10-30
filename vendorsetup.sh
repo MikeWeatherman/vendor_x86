@@ -36,35 +36,3 @@ function lunch
 
 }
 
-# Get the exact value of a build variable.
-function get_build_var()
-{
-    if [ "$1" = "COMMON_LUNCH_CHOICES" ]
-    then
-        valid_targets=`mixinup -t`
-        save=`build/soong/soong_ui.bash --dumpvar-mode $1`
-        unset LUNCH_MENU_CHOICES
-        for t in ${save[@]}; do
-            array=(${t/-/ })
-            target=${array[0]}
-            if [[ "${valid_targets}" =~ "$target" ]]; then
-                   LUNCH_MENU_CHOICES+=($t)
-            fi
-        done
-        echo ${LUNCH_MENU_CHOICES[@]}
-        return
-    else
-        if [ "$BUILD_VAR_CACHE_READY" = "true" ]
-        then
-            eval "echo \"\${var_cache_$1}\""
-            return
-        fi
-
-        local T=$(gettop)
-        if [ ! "$T" ]; then
-            echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
-            return
-        fi
-        (\cd $T; build/soong/soong_ui.bash --dumpvar-mode $1)
-    fi
-}
