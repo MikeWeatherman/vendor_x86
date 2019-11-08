@@ -1,9 +1,12 @@
-# LOCAL_PATH := $(call my-dir)
+my_path := $(call my-dir)
+
+LOCAL_PATH := $(my_path)
+include $(CLEAR_VARS)
 
 # Copy files
 
 define addon-copy-to-system
-$(shell python "$(LOCAL_PATH)/copy_files.py" "$(LOCAL_PATH)/$(1)/" "$(2)" "$(PLATFORM_SDK_VERSION)")
+$(shell python "vendor/x86/copy_files.py" "vendor/x86/$(1)/" "$(2)" "$(PLATFORM_SDK_VERSION)")
 endef
 
 
