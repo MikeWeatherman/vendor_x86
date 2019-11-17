@@ -1,7 +1,7 @@
-From 1674522d8125794969c71a29dad2ebcdaeffe658 Mon Sep 17 00:00:00 2001
+From 39ed623355e32c99a178ec82ca3286c0face08ef Mon Sep 17 00:00:00 2001
 From: Michael Goffioul <michael.goffioul@lincor.com>
 Date: Sun, 13 Oct 2019 12:55:12 -0400
-Subject: [PATCH 1/6] DO NOT MERGE: Mount system partition at root.
+Subject: [PATCH 1/8] DO NOT MERGE: Mount system partition at root.
 
 ---
  Android.mk                |  2 +-
@@ -134,7 +134,7 @@ index 7b20c9d..91f07f5 100755
  
  exec ${SWITCH:-switch_root} /android /init
 diff --git a/install/scripts/1-install b/install/scripts/1-install
-index 95dcc78..f762403 100644
+index 8de1642..0b54007 100644
 --- a/install/scripts/1-install
 +++ b/install/scripts/1-install
 @@ -213,7 +213,7 @@ format_fs()

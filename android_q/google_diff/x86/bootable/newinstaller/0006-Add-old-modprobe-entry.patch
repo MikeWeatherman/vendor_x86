@@ -1,7 +1,7 @@
-From 88e8609cd1cba0f47a135ba3eda9fc46d8d83666 Mon Sep 17 00:00:00 2001
+From 1ab1415a09bc98e02c9fbecbc279159ee909f328 Mon Sep 17 00:00:00 2001
 From: Jon West <electrikjesus@gmail.com>
 Date: Thu, 24 Oct 2019 13:10:59 -0400
-Subject: [PATCH 6/6] Add old modprobe entry
+Subject: [PATCH 6/8] Add old modprobe entry
 
 Add legacy modprobe mode to installed boot options too
 
@@ -9,7 +9,6 @@ Conflicts:
 	install/scripts/1-install
 
 Add old modprobe method as a boot option (AUTO_LOAD=old)
-
 
 add the needed string in grub.cfg
 ---
@@ -42,7 +41,7 @@ index 8eb26cd..82c3458 100644
  	add_entry "Installation" INSTALL=1
  fi
 diff --git a/install/scripts/1-install b/install/scripts/1-install
-index f762403..2c99378 100644
+index 0b54007..7d7873c 100644
 --- a/install/scripts/1-install
 +++ b/install/scripts/1-install
 @@ -255,6 +255,7 @@ create_menulst()

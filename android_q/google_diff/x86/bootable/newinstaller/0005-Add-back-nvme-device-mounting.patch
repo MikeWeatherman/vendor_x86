@@ -1,7 +1,7 @@
-From 0af11edbc3afb3a02f0a81a21ba420cfee094084 Mon Sep 17 00:00:00 2001
+From 1fe0bb652af6c0ca91a0ecc9ca1fa34af421510a Mon Sep 17 00:00:00 2001
 From: Jon West <electrikjesus@gmail.com>
 Date: Tue, 5 Mar 2019 15:42:35 -0500
-Subject: [PATCH 5/6] Add back nvme device mounting
+Subject: [PATCH 5/8] Add back nvme device mounting
 
 Conflicts:
 	initrd/init
