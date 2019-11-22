@@ -32,7 +32,9 @@ function lunch
     aosp_lunch $*
 
     rm -rf vendor/x86/Android.mk
-    vendor/x86/autopatch.sh
+    if ["$NOPATCH"!="true"]; then
+	vendor/x86/autopatch.sh
+    fi
 
 }
 
